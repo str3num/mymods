@@ -1,0 +1,14 @@
+{
+  "item.clockworkblock.clockwork_block": "Clockwork Block",
+  "block.clockworkblock.clockwork_block": "Clockwork Block",
+  "message.clockworkblock.output_speed": "Clockwork Block output speed: %s RPM",
+  "tooltip.clockworkblock.energy": "Energy: %s / %s SU·tick",
+  "tooltip.clockworkblock.stored_energy": "Stored Energy",
+  "tooltip.clockworkblock.power": "Power: %s SU",
+  "tooltip.clockworkblock.power_label": "Current Power",
+  "tooltip.clockworkblock.power_cap": "Current Max Power",
+  "tooltip.clockworkblock.power_value": "Power Multiplier",
+  "tooltip.clockworkblock.required_speed": "Required Minimum Speed",
+  "tooltip.clockworkblock.output_speed": "Output speed: %s RPM",
+  "tooltip.clockworkblock.redstone": "Applies output only while powered by redstone"
+}

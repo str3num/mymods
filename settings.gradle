@@ -1,0 +1,11 @@
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        maven { url = "https://maven.neoforged.net/releases" }
+    }
+}
+
+includeBuild("../Create")
+
+rootProject.name = "clockworkblock-1.21.1"

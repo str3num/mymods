@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=down,powered=false": { "model": "clockworkblock:block/clockwork_block", "x": 90 },
+    "facing=down,powered=true": { "model": "clockworkblock:block/clockwork_block", "x": 90 },
+    "facing=up,powered=false": { "model": "clockworkblock:block/clockwork_block", "x": 270 },
+    "facing=up,powered=true": { "model": "clockworkblock:block/clockwork_block", "x": 270 },
+    "facing=north,powered=false": { "model": "clockworkblock:block/clockwork_block" },
+    "facing=north,powered=true": { "model": "clockworkblock:block/clockwork_block" },
+    "facing=south,powered=false": { "model": "clockworkblock:block/clockwork_block", "y": 180 },
+    "facing=south,powered=true": { "model": "clockworkblock:block/clockwork_block", "y": 180 },
+    "facing=west,powered=false": { "model": "clockworkblock:block/clockwork_block", "y": 270 },
+    "facing=west,powered=true": { "model": "clockworkblock:block/clockwork_block", "y": 270 },
+    "facing=east,powered=false": { "model": "clockworkblock:block/clockwork_block", "y": 90 },
+    "facing=east,powered=true": { "model": "clockworkblock:block/clockwork_block", "y": 90 }
+  }
+}
