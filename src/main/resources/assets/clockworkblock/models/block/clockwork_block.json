@@ -1,12 +1,3 @@
 {
-  "parent": "minecraft:block/cube",
-  "textures": {
-    "down": "clockworkblock:block/clockwork_arrow",
-    "up": "clockworkblock:block/clockwork_adjust",
-    "north": "clockworkblock:block/clockwork_output",
-    "south": "clockworkblock:block/clockwork_input",
-    "west": "clockworkblock:block/clockwork_arrow",
-    "east": "clockworkblock:block/clockwork_arrow",
-    "particle": "clockworkblock:block/clockwork_arrow"
-  }
+  "parent": "clockworkblock:block/adjustable_chain_gearshift_single"
 }

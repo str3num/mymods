@@ -44,8 +44,7 @@ public class ClockworkBlock extends DirectionalKineticBlock implements IBE<Clock
 
     @Override
     public boolean hasShaftTowards(LevelReader world, BlockPos pos, BlockState state, Direction face) {
-        Direction activeFace = state.getValue(POWERED) ? getOutputFace(state) : getInputFace(state);
-        return face == activeFace;
+        return face == getActiveShaftFace(state);
     }
 
     @Override
@@ -165,6 +164,10 @@ public class ClockworkBlock extends DirectionalKineticBlock implements IBE<Clock
         stack.set(ClockworkDataComponents.STORED_ENERGY.get(), blockEntity.getStoredEnergy());
         stack.set(ClockworkDataComponents.OUTPUT_SPEED.get(), blockEntity.getOutputSpeed());
         stack.set(ClockworkDataComponents.POWER.get(), blockEntity.getPower());
+    }
+
+    public static Direction getActiveShaftFace(BlockState state) {
+        return state.getValue(POWERED) ? getOutputFace(state) : getInputFace(state);
     }
 
     public static Direction getOutputFace(BlockState state) {
