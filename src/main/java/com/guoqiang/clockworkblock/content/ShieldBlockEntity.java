@@ -150,7 +150,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
 
             Vector3d impulseLoc = JOMLConversion.toJOML(pending.worldHitPos);
             Vector3d worldImpulse = JOMLConversion.toJOML(
-                pending.pushDir.scale(pending.strength * 100.0));
+                pending.pushDir.scale(pending.strength * 10.0));
             Vector3d localImpulse = hit.logicalPose().transformNormalInverse(worldImpulse);
 
             forceTotal.applyImpulseAtPoint(hit, impulseLoc, localImpulse);
@@ -260,7 +260,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
                 continue;
 
             Vec3 dir = diff.normalize();
-            float pushStrength = flow / (2.0f * (float) distance);
+            float pushStrength = flow / (2.0f * (float) (distance * distance));
             pendingSubLevelForces.add(
                 new PendingForce(other, otherCenter, dir, pushStrength));
         }
@@ -368,8 +368,8 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
     }
 
     private void applyPushForce(Entity entity, Vec3 diff, float distance) {
-        float factor = (entity instanceof ItemEntity) ? 1f / 128f : 1f / 32f;
-        float strength = flow / (2.0f * Math.max(distance, 0.01f));
+        float factor = (entity instanceof ItemEntity) ? 1f / 2f : 1f / 2f;
+        float strength = flow / (2.0f * Math.max(distance * distance, 0.0001f));
         Vec3 pushVec = diff.normalize().scale(strength);
         entity.setDeltaMovement(entity.getDeltaMovement().add(pushVec.scale(factor)));
         entity.fallDistance = 0;

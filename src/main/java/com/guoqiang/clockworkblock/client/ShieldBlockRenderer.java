@@ -14,7 +14,6 @@ import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
 import net.createmod.catnip.data.Iterate;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -46,19 +45,13 @@ public class ShieldBlockRenderer implements BlockEntityRenderer<ShieldBlockEntit
         if (link == null)
             return;
 
-        BlockPos pos = be.getBlockPos();
         for (boolean first : Iterate.trueAndFalse) {
             ValueBoxTransform transform = first ? link.firstSlot : link.secondSlot;
             ItemStack stack = first ? link.frequencyFirst.getStack() : link.frequencyLast.getStack();
 
-            // Compute light at the item's actual world position (outside the block face)
-            Vec3 localOffset = transform.getLocalOffset(be.getLevel(), pos, state);
-            Vec3 worldPos = Vec3.atLowerCornerOf(pos).add(localOffset);
-            int itemLight = LevelRenderer.getLightColor(be.getLevel(), BlockPos.containing(worldPos));
-
             ms.pushPose();
-            transform.transform(be.getLevel(), pos, state, ms);
-            ValueBoxRenderer.renderItemIntoValueBox(stack, ms, buffer, itemLight, overlay);
+            transform.transform(be.getLevel(), be.getBlockPos(), state, ms);
+            ValueBoxRenderer.renderItemIntoValueBox(stack, ms, buffer, 0xF000F0, overlay);
             ms.popPose();
         }
     }
