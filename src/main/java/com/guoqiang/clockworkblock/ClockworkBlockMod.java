@@ -1,11 +1,16 @@
 package com.guoqiang.clockworkblock;
 
+import com.guoqiang.clockworkblock.client.ShieldBlockScreen;
 import com.guoqiang.clockworkblock.content.ClockworkBlockEntity;
 import com.simibubi.create.api.stress.BlockStressValues;
 
+import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
 @Mod(ClockworkBlockMod.MOD_ID)
 public class ClockworkBlockMod {
@@ -16,6 +21,7 @@ public class ClockworkBlockMod {
         ClockworkBlockEntityTypes.register(modEventBus);
         ClockworkDataComponents.register(modEventBus);
         ClockworkCreativeModeTabs.register(modEventBus);
+        ClockworkMenuTypes.register(modEventBus);
         modEventBus.addListener(this::commonSetup);
     }
 
@@ -24,5 +30,13 @@ public class ClockworkBlockMod {
             ClockworkBlocks.CLOCKWORK_BLOCK.get(),
             new BlockStressValues.GeneratedRpm(ClockworkBlockEntity.DEFAULT_OUTPUT_SPEED, true)
         ));
+    }
+
+    @EventBusSubscriber(modid = MOD_ID, value = Dist.CLIENT, bus = EventBusSubscriber.Bus.MOD)
+    public static class ClientEvents {
+        @SubscribeEvent
+        public static void registerScreens(RegisterMenuScreensEvent event) {
+            event.register(ClockworkMenuTypes.SHIELD_BLOCK.get(), ShieldBlockScreen::new);
+        }
     }
 }

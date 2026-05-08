@@ -1,6 +1,7 @@
 package com.guoqiang.clockworkblock;
 
 import com.guoqiang.clockworkblock.content.ClockworkBlockEntity;
+import com.guoqiang.clockworkblock.content.ShieldBlockEntity;
 
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.IEventBus;
@@ -15,6 +16,12 @@ public class ClockworkBlockEntityTypes {
         BLOCK_ENTITY_TYPES.register(
             "clockwork_block",
             () -> BlockEntityType.Builder.of(ClockworkBlockEntity::new, ClockworkBlocks.CLOCKWORK_BLOCK.get()).build(null)
+        );
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ShieldBlockEntity>> SHIELD_BLOCK =
+        BLOCK_ENTITY_TYPES.register(
+            "shield_block",
+            () -> BlockEntityType.Builder.of(ShieldBlockEntity::new, ClockworkBlocks.SHIELD_BLOCK.get()).build(null)
         );
 
     private ClockworkBlockEntityTypes() {

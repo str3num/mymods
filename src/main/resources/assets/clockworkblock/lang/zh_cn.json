@@ -10,5 +10,9 @@
   "tooltip.clockworkblock.power_value": "功率倍率",
   "tooltip.clockworkblock.required_speed": "所需最低转速",
   "tooltip.clockworkblock.output_speed": "输出转速：%s RPM",
-  "tooltip.clockworkblock.redstone": "仅在接通红石时输出转动能"
+  "tooltip.clockworkblock.redstone": "仅在接通红石时输出转动能",
+  "block.clockworkblock.shield_block": "斥力方块",
+  "item.clockworkblock.shield_block": "斥力方块",
+  "message.clockworkblock.shield_phi": "斥力角度：%s 度",
+  "message.clockworkblock.shield_max_range": "斥力范围：%s 格"
 }

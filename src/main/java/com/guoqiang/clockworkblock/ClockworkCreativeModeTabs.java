@@ -19,6 +19,7 @@ public class ClockworkCreativeModeTabs {
         public static void onBuildTab(BuildCreativeModeTabContentsEvent event) {
             if (event.getTabKey() == CreativeModeTabs.REDSTONE_BLOCKS) {
                 event.accept(ClockworkBlocks.CLOCKWORK_BLOCK_ITEM.get());
+                event.accept(ClockworkBlocks.SHIELD_BLOCK_ITEM.get());
             }
         }
     }

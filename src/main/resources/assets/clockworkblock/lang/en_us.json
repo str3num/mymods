@@ -10,5 +10,9 @@
   "tooltip.clockworkblock.power_value": "Power Multiplier",
   "tooltip.clockworkblock.required_speed": "Required Minimum Speed",
   "tooltip.clockworkblock.output_speed": "Output speed: %s RPM",
-  "tooltip.clockworkblock.redstone": "Applies output only while powered by redstone"
+  "tooltip.clockworkblock.redstone": "Applies output only while powered by redstone",
+  "block.clockworkblock.shield_block": "Shield Block",
+  "item.clockworkblock.shield_block": "Shield Block",
+  "message.clockworkblock.shield_phi": "Shield angle: %s degrees",
+  "message.clockworkblock.shield_max_range": "Shield range: %s blocks"
 }

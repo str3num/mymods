@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Client",
+      "presentation": {
+        "group": "Mod Development - clockworkblock-1.21.1",
+        "order": 0
+      },
+      "projectName": "clockworkblock-1.21.1",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@/home/guoqiang/personal/minemods/mymods/build/moddev/clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@/home/guoqiang/personal/minemods/mymods/build/moddev/clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dclockworkblock%%/home/guoqiang/personal/minemods/mymods/bin/main"
+      ],
+      "cwd": "${workspaceFolder}/run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    },
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "Server",
+      "presentation": {
+        "group": "Mod Development - clockworkblock-1.21.1",
+        "order": 1
+      },
+      "projectName": "clockworkblock-1.21.1",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@/home/guoqiang/personal/minemods/mymods/build/moddev/serverRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@/home/guoqiang/personal/minemods/mymods/build/moddev/serverRunVmArgs.txt",
+        "-Dfml.modFolders\u003dclockworkblock%%/home/guoqiang/personal/minemods/mymods/bin/main"
+      ],
+      "cwd": "${workspaceFolder}/run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}

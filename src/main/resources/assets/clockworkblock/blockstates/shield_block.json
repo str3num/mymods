@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=down":  { "model": "clockworkblock:block/shield_block", "x": 180 },
+    "facing=east":  { "model": "clockworkblock:block/shield_block", "x": 90, "y": 90 },
+    "facing=north": { "model": "clockworkblock:block/shield_block", "x": 90 },
+    "facing=south": { "model": "clockworkblock:block/shield_block", "x": 90, "y": 180 },
+    "facing=up":    { "model": "clockworkblock:block/shield_block" },
+    "facing=west":  { "model": "clockworkblock:block/shield_block", "x": 90, "y": 270 }
+  }
+}
