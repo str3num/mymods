@@ -1,8 +1,6 @@
 package com.guoqiang.clockworkblock.content;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 import com.simibubi.create.content.kinetics.fan.AirCurrent;
@@ -11,6 +9,13 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
+import dev.ryanhcode.sable.api.physics.force.ForceGroups;
+import dev.ryanhcode.sable.api.physics.force.ForceTotal;
+import dev.ryanhcode.sable.api.physics.force.QueuedForceGroup;
+import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
+import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
+import dev.ryanhcode.sable.companion.math.JOMLConversion;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
@@ -18,24 +23,41 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3d;
 
 public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySubLevelActor {
+
+    // Per-level shared state so all shields share scan results within the same tick
+    private static final Map<Level, SharedScanState> LEVEL_SHARED_STATE = new WeakHashMap<>();
+
+    private static class SharedScanState {
+        long tickStamp;
+        final Set<Entity> entities = new HashSet<>();
+        final Set<ServerSubLevel> subLevels = new HashSet<>();
+
+        SharedScanState(long tickStamp) {
+            this.tickStamp = tickStamp;
+        }
+    }
 
     private int phi = 90;
     private int minRange = 0;
     private int maxRange = 8;
     private final List<Entity> pushingEntities = new ArrayList<>();
     private boolean onSubLevel;
+
+    private record PendingForce(ServerSubLevel subLevel, Vec3 worldHitPos, Vec3 pushDir, float strength) {}
+    private final List<PendingForce> pendingSubLevelForces = new ArrayList<>();
 
     public ShieldBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         super(type, pos, state);
@@ -56,14 +78,10 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         if (level == null)
             return;
 
-        // Detect if we're on a Sable sub-level on first tick
         if (!onSubLevel) {
             onSubLevel = Sable.HELPER.getContaining(this) != null;
         }
 
-        // When on a Sable sub-level, the block entity exists in the main world
-        // at the plot position (not where the contraption actually is).
-        // Entity scanning is handled by sable$tick() instead.
         if (onSubLevel) {
             tickClientOnly(VecHelper.getCenterOf(worldPosition),
                 getBlockState().getValue(ShieldBlock.FACING));
@@ -80,7 +98,6 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         }
     }
 
-    // Called once per game tick when this block entity is on a Sable sub-level.
     @Override
     public void sable$tick(ServerSubLevel subLevel) {
         onSubLevel = true;
@@ -97,7 +114,145 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         Vec3 localCenter = VecHelper.getCenterOf(worldPosition);
         Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(level, localCenter);
 
-        tickServer(parentLevel, worldCenter, facing);
+        scanAndPush(subLevel, parentLevel, worldCenter, facing);
+    }
+
+    @Override
+    public void sable$physicsTick(ServerSubLevel subLevel, RigidBodyHandle handle, double timeStep) {
+        if (pendingSubLevelForces.isEmpty())
+            return;
+
+        for (PendingForce pending : pendingSubLevelForces) {
+            ServerSubLevel hit = pending.subLevel;
+            if (hit.isRemoved())
+                continue;
+
+            QueuedForceGroup forceGroup = hit.getOrCreateQueuedForceGroup(ForceGroups.PROPULSION.get());
+            ForceTotal forceTotal = forceGroup.getForceTotal();
+
+            Vector3d impulseLoc = JOMLConversion.toJOML(pending.worldHitPos);
+            Vector3d worldImpulse = JOMLConversion.toJOML(
+                pending.pushDir.scale(pending.strength * 100.0));
+            Vector3d localImpulse = hit.logicalPose().transformNormalInverse(worldImpulse);
+
+            forceTotal.applyImpulseAtPoint(hit, impulseLoc, localImpulse);
+        }
+        pendingSubLevelForces.clear();
+    }
+
+    private SharedScanState getSharedState(Level level) {
+        long currentTick = level.getGameTime();
+        SharedScanState state = LEVEL_SHARED_STATE.get(level);
+        if (state == null || state.tickStamp != currentTick) {
+            state = new SharedScanState(currentTick);
+            LEVEL_SHARED_STATE.put(level, state);
+        }
+        return state;
+    }
+
+    private void scanAndPush(ServerSubLevel ownSubLevel, Level parentLevel, Vec3 center, Direction facing) {
+        SharedScanState shared = getSharedState(parentLevel);
+        Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
+        double halfPhiRad = Math.toRadians(phi / 2.0);
+        double cosHalfPhi = Math.cos(halfPhiRad);
+
+        // 1. Scan regular entities in own cone → add to shared
+        AABB bb = new AABB(center, center).inflate(maxRange);
+        List<Entity> entities = parentLevel.getEntitiesOfClass(Entity.class, bb,
+            e -> {
+                Vec3 d = e.position().subtract(center);
+                double dist = d.length();
+                if (dist > maxRange || dist < minRange
+                    || e.isShiftKeyDown()
+                    || AirCurrent.isPlayerCreativeFlying(e))
+                    return false;
+                return d.normalize().dot(facingVec) >= cosHalfPhi;
+            });
+
+        for (Entity entity : entities) {
+            shared.entities.add(entity);
+        }
+
+        // 2. Scan other sub-levels in own cone → add to shared
+        if (parentLevel instanceof ServerLevel serverLevel) {
+            ServerSubLevelContainer container =
+                (ServerSubLevelContainer) SubLevelContainer.getContainer(serverLevel);
+            if (container != null) {
+                for (ServerSubLevel other : container.getAllSubLevels()) {
+                    if (other == ownSubLevel || other.isRemoved())
+                        continue;
+
+                    org.joml.Vector3d jomlPos = new org.joml.Vector3d();
+                    other.logicalPose().transformPosition(
+                        JOMLConversion.toJOML(other.getPlot().getCenterBlock().getCenter()),
+                        jomlPos);
+                    Vec3 otherCenter = new Vec3(jomlPos.x, jomlPos.y, jomlPos.z);
+
+                    Vec3 diff = otherCenter.subtract(center);
+                    double distance = diff.length();
+                    if (distance > maxRange || distance < minRange)
+                        continue;
+                    if (distance < 0.01)
+                        continue;
+
+                    Vec3 dir = diff.normalize();
+                    if (dir.dot(facingVec) < cosHalfPhi)
+                        continue;
+
+                    shared.subLevels.add(other);
+                }
+            }
+        }
+
+        // 3. Push ALL shared entities from this shield's position (no cone check — radial repel)
+        for (Entity entity : shared.entities) {
+            if (!entity.isAlive())
+                continue;
+            Vec3 diff = entity.position().subtract(center);
+            double distance = diff.length();
+            if (distance > maxRange || distance < minRange
+                || entity.isShiftKeyDown()
+                || AirCurrent.isPlayerCreativeFlying(entity))
+                continue;
+            applyPushForce(entity, diff, (float) distance);
+        }
+
+        // 4. Create PendingForce for ALL shared sub-levels from this shield's position
+        for (ServerSubLevel other : shared.subLevels) {
+            if (other == ownSubLevel || other.isRemoved())
+                continue;
+
+            org.joml.Vector3d jomlPos = new org.joml.Vector3d();
+            other.logicalPose().transformPosition(
+                JOMLConversion.toJOML(other.getPlot().getCenterBlock().getCenter()),
+                jomlPos);
+            Vec3 otherCenter = new Vec3(jomlPos.x, jomlPos.y, jomlPos.z);
+
+            Vec3 diff = otherCenter.subtract(center);
+            double distance = diff.length();
+            if (distance > maxRange || distance < minRange)
+                continue;
+            if (distance < 0.01)
+                continue;
+
+            Vec3 dir = diff.normalize();
+            float pushStrength = (float) Math.max(maxRange - distance, 0.01);
+            pendingSubLevelForces.add(
+                new PendingForce(other, otherCenter, dir, pushStrength));
+        }
+
+        // 5. Maintain pushingEntities for client-side tracking (own cone only)
+        for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
+            Entity entity = it.next();
+            if (!entity.isAlive()) {
+                it.remove();
+            }
+        }
+        for (Entity entity : entities) {
+            if (!pushingEntities.contains(entity)) {
+                pushingEntities.add(entity);
+            }
+        }
     }
 
     private void tickClientOnly(Vec3 center, Direction facing) {
@@ -131,32 +286,35 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
     }
 
     private void tickServer(Level scanLevel, Vec3 center, Direction facing) {
-        scanForEntities(scanLevel, center, facing);
+        SharedScanState shared = getSharedState(scanLevel);
 
-        for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
-            Entity entity = it.next();
-            if (!entity.isAlive()) {
-                it.remove();
+        // Scan own cone → populates pushingEntities, also adds to shared
+        scanForEntities(scanLevel, center, facing, shared);
+
+        // Push ALL shared entities from this shield's position (no cone/LOS check — radial repel)
+        for (Entity entity : shared.entities) {
+            if (!entity.isAlive())
                 continue;
-            }
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
             if (distance > maxRange || distance < minRange
                 || entity.isShiftKeyDown()
-                || AirCurrent.isPlayerCreativeFlying(entity)) {
-                it.remove();
+                || AirCurrent.isPlayerCreativeFlying(entity))
                 continue;
-            }
             applyPushForce(entity, diff, (float) distance);
+        }
+
+        // Clean up dead entries
+        for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
+            if (!it.next().isAlive())
+                it.remove();
         }
     }
 
-    private void scanForEntities(Level scanLevel, Vec3 center, Direction facing) {
+    private void scanForEntities(Level scanLevel, Vec3 center, Direction facing, SharedScanState shared) {
         Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
         double halfPhiRad = Math.toRadians(phi / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
-        // Skip line-of-sight check when on sub-level: the block doesn't exist
-        // in parent world coordinates, so raycasts would always miss.
         boolean checkLineOfSight = !onSubLevel;
 
         AABB bb = new AABB(center, center).inflate(maxRange);
@@ -179,6 +337,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
             if (!pushingEntities.contains(entity)) {
                 pushingEntities.add(entity);
             }
+            shared.entities.add(entity);
         }
 
         for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
