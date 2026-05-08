@@ -1,6 +1,12 @@
 {
-  "parent": "block/cube_all",
+  "parent": "block/cube",
   "textures": {
-    "all": "clockworkblock:block/gearbox"
+    "particle": "clockworkblock:block/shield_side",
+    "north": "clockworkblock:block/shield_output",
+    "south": "clockworkblock:block/shield_side",
+    "east": "clockworkblock:block/shield_angle",
+    "west": "clockworkblock:block/shield_freq",
+    "up": "clockworkblock:block/shield_side",
+    "down": "clockworkblock:block/shield_side"
   }
 }

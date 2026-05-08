@@ -38,7 +38,11 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
         CompoundTag data = context.blockEntityData;
 
         int phi = Mth.clamp(data.getInt("Phi"), 45, 145);
-        int maxRange = Mth.clamp(data.getInt("MaxRange"), 1, 32);
+        int flow;
+        if (data.contains("Flow"))
+            flow = Mth.clamp(data.getInt("Flow"), 1, 32);
+        else
+            flow = Mth.clamp(data.getInt("MaxRange"), 1, 32);
 
         @SuppressWarnings("unchecked")
         List<Entity> pushing = (List<Entity>) context.temporaryData;
@@ -47,7 +51,7 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
             context.temporaryData = pushing;
         }
 
-        scanAndPush(context.world, center, facing, phi, maxRange, pushing);
+        scanAndPush(context.world, center, facing, phi, flow, pushing);
     }
 
     private Vec3 getWorldCenter(MovementContext context) {
@@ -61,18 +65,19 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
     }
 
     private void scanAndPush(net.minecraft.world.level.Level world, Vec3 center,
-                             Direction facing, int phi, int maxRange,
+                             Direction facing, int phi, int flow,
                              List<Entity> pushing) {
         Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
         double halfPhiRad = Math.toRadians(phi / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
+        int scanRange = flow;
 
-        AABB bb = new AABB(center, center).inflate(maxRange);
+        AABB bb = new AABB(center, center).inflate(scanRange);
         for (Entity entity : world.getEntitiesOfClass(Entity.class, bb,
                 e -> {
                     Vec3 d = e.position().subtract(center);
                     double dist = d.length();
-                    if (dist > maxRange || dist < 0.5
+                    if (dist > scanRange || dist < 0.5
                         || e.isShiftKeyDown()
                         || AirCurrent.isPlayerCreativeFlying(e))
                         return false;
@@ -94,14 +99,15 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
             }
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
-            if (distance > maxRange || distance < 0.5
+            if (distance > scanRange || distance < 0.5
                 || entity.isShiftKeyDown()
                 || AirCurrent.isPlayerCreativeFlying(entity)) {
                 it.remove();
                 continue;
             }
             float factor = (entity instanceof ItemEntity) ? 1f / 128f : 1f / 32f;
-            Vec3 pushVec = diff.normalize().scale(Math.max(maxRange - distance, 0.01));
+            float strength = flow / (2.0f * Math.max((float) distance, 0.01f));
+            Vec3 pushVec = diff.normalize().scale(strength);
             entity.setDeltaMovement(entity.getDeltaMovement().add(pushVec.scale(factor)));
             entity.fallDistance = 0;
             entity.hurtMarked = true;

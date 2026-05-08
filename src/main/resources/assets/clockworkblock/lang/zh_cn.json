@@ -14,5 +14,7 @@
   "block.clockworkblock.shield_block": "斥力方块",
   "item.clockworkblock.shield_block": "斥力方块",
   "message.clockworkblock.shield_phi": "斥力角度：%s 度",
-  "message.clockworkblock.shield_max_range": "斥力范围：%s 格"
+  "message.clockworkblock.shield_flow": "斥力流量：%s",
+  "block.clockworkblock.shield_block.frequency_first": "第一频率",
+  "block.clockworkblock.shield_block.frequency_second": "第二频率"
 }

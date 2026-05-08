@@ -6,11 +6,15 @@ import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.WrenchableDirectionalBlock;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
@@ -18,6 +22,7 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 public class ShieldBlock extends WrenchableDirectionalBlock implements IBE<ShieldBlockEntity> {
 
@@ -36,22 +41,71 @@ public class ShieldBlock extends WrenchableDirectionalBlock implements IBE<Shiel
         return InteractionResult.FAIL;
     }
 
+    /** Blue face (right side): angle/flow adjustment via GUI. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
+        if (hitResult.getDirection() != getAngleFace(state))
+            return InteractionResult.PASS;
+
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
             withBlockEntityDo(level, pos, be ->
                 serverPlayer.openMenu(new SimpleMenuProvider(
-                    (id, inv, p) -> new ShieldBlockMenu(id, inv, pos, be.getPhi(), be.getMaxRange()),
+                    (id, inv, p) -> new ShieldBlockMenu(id, inv, pos, be.getPhi(), be.getFlow()),
                     Component.translatable("block.clockworkblock.shield_block")
                 ), buf -> {
                     buf.writeBlockPos(pos);
                     buf.writeInt(be.getPhi());
-                    buf.writeInt(be.getMaxRange());
+                    buf.writeInt(be.getFlow());
                 })
             );
         }
         return InteractionResult.SUCCESS;
+    }
+
+    /** Red face (left side): set frequency with item. */
+    @Override
+    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+                                               Player player, InteractionHand hand, BlockHitResult hitResult) {
+        if (player.isShiftKeyDown())
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+
+        if (hitResult.getDirection() != getFrequencyFace(state))
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+
+        if (!level.isClientSide) {
+            withBlockEntityDo(level, pos, be ->
+                be.setFrequency(isFirstSlot(state, hitResult), stack));
+        }
+        return ItemInteractionResult.SUCCESS;
+    }
+
+    /** Red face: left side. After X rotation, west stays west. */
+    public static Direction getFrequencyFace(BlockState state) {
+        Direction facing = state.getValue(FACING);
+        if (facing.getAxis().isHorizontal())
+            return facing.getCounterClockWise();
+        return Direction.WEST;
+    }
+
+    /** Blue face: right side. After X rotation, east stays east. */
+    static Direction getAngleFace(BlockState state) {
+        Direction facing = state.getValue(FACING);
+        if (facing.getAxis().isHorizontal())
+            return facing.getClockWise();
+        return Direction.EAST;
+    }
+
+    private static boolean isFirstSlot(BlockState state, BlockHitResult hit) {
+        Direction freqFace = getFrequencyFace(state);
+        if (hit.getDirection() != freqFace)
+            return true;
+
+        Vec3 local = hit.getLocation().subtract(Vec3.atLowerCornerOf(hit.getBlockPos()));
+        if (freqFace.getAxis().isHorizontal()) {
+            return local.y > 0.5;
+        }
+        return freqFace == Direction.DOWN ? local.z < 0.5 : local.z > 0.5;
     }
 
     @Override

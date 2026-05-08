@@ -18,16 +18,16 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
 
     private Button phiMinus;
     private Button phiPlus;
-    private Button rangeMinus;
-    private Button rangePlus;
+    private Button flowMinus;
+    private Button flowPlus;
 
     private int phi;
-    private int maxRange;
+    private int flow;
 
     public ShieldBlockScreen(ShieldBlockMenu menu, Inventory inv, Component title) {
         super(menu, inv, title);
         this.phi = menu.getPhi();
-        this.maxRange = menu.getMaxRange();
+        this.flow = menu.getFlow();
     }
 
     @Override
@@ -38,7 +38,6 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
 
         int x = getGuiLeft();
         int y = getGuiTop();
-        int centerX = x + BG_WIDTH / 2;
 
         phiMinus = Button.builder(Component.literal("-"), btn -> {
             minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 0);
@@ -50,20 +49,20 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
             phi = Math.min(145, phi + 15);
         }).pos(x + 150, y + 30).size(20, 20).build();
 
-        rangeMinus = Button.builder(Component.literal("-"), btn -> {
+        flowMinus = Button.builder(Component.literal("-"), btn -> {
             minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 2);
-            maxRange = Math.max(1, maxRange - 2);
+            flow = Math.max(1, flow - 2);
         }).pos(x + 100, y + 60).size(20, 20).build();
 
-        rangePlus = Button.builder(Component.literal("+"), btn -> {
+        flowPlus = Button.builder(Component.literal("+"), btn -> {
             minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 3);
-            maxRange = Math.min(32, maxRange + 2);
+            flow = Math.min(32, flow + 2);
         }).pos(x + 150, y + 60).size(20, 20).build();
 
         addRenderableWidget(phiMinus);
         addRenderableWidget(phiPlus);
-        addRenderableWidget(rangeMinus);
-        addRenderableWidget(rangePlus);
+        addRenderableWidget(flowMinus);
+        addRenderableWidget(flowPlus);
     }
 
     @Override
@@ -90,8 +89,8 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         Component phiLabel = Component.translatable("message.clockworkblock.shield_phi", phi);
         graphics.drawString(font, phiLabel, x + 8, y + 34, 0xA0A0A0, false);
 
-        Component rangeLabel = Component.translatable("message.clockworkblock.shield_max_range", maxRange);
-        graphics.drawString(font, rangeLabel, x + 8, y + 64, 0xA0A0A0, false);
+        Component flowLabel = Component.translatable("message.clockworkblock.shield_flow", flow);
+        graphics.drawString(font, flowLabel, x + 8, y + 64, 0xA0A0A0, false);
     }
 
     @Override
@@ -100,8 +99,8 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         if (menu.getPhi() != phi) {
             phi = menu.getPhi();
         }
-        if (menu.getMaxRange() != maxRange) {
-            maxRange = menu.getMaxRange();
+        if (menu.getFlow() != flow) {
+            flow = menu.getFlow();
         }
     }
 }

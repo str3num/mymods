@@ -14,5 +14,7 @@
   "block.clockworkblock.shield_block": "Shield Block",
   "item.clockworkblock.shield_block": "Shield Block",
   "message.clockworkblock.shield_phi": "Shield angle: %s degrees",
-  "message.clockworkblock.shield_max_range": "Shield range: %s blocks"
+  "message.clockworkblock.shield_flow": "Shield flow: %s",
+  "block.clockworkblock.shield_block.frequency_first": "First Frequency",
+  "block.clockworkblock.shield_block.frequency_second": "Second Frequency"
 }

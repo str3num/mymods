@@ -4,6 +4,7 @@ import java.util.*;
 
 import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 import com.simibubi.create.content.kinetics.fan.AirCurrent;
+import com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler.Frequency;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
@@ -27,6 +28,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -37,13 +39,18 @@ import org.joml.Vector3d;
 
 public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySubLevelActor {
 
-    // Per-level shared state so all shields share scan results within the same tick
-    private static final Map<Level, SharedScanState> LEVEL_SHARED_STATE = new WeakHashMap<>();
+    /** Network key: groups shields by (firstFrequency, secondFrequency) pair */
+    private record FrequencyKey(Frequency first, Frequency second) {}
+
+    /** Per-level, per-frequency shared scan state. Cleared each game tick. */
+    private static final Map<Level, Map<FrequencyKey, SharedScanState>> LEVEL_FREQ_STATE = new WeakHashMap<>();
 
     private static class SharedScanState {
-        long tickStamp;
+        final long tickStamp;
         final Set<Entity> entities = new HashSet<>();
         final Set<ServerSubLevel> subLevels = new HashSet<>();
+        /** Sub-levels that contain a shield with this frequency — excluded from pushing */
+        final Set<ServerSubLevel> alliedSubLevels = new HashSet<>();
 
         SharedScanState(long tickStamp) {
             this.tickStamp = tickStamp;
@@ -52,7 +59,9 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
 
     private int phi = 90;
     private int minRange = 0;
-    private int maxRange = 8;
+    private int flow = 8;
+    private Frequency firstFrequency = Frequency.EMPTY;
+    private Frequency secondFrequency = Frequency.EMPTY;
     private final List<Entity> pushingEntities = new ArrayList<>();
     private boolean onSubLevel;
 
@@ -114,7 +123,10 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         Vec3 localCenter = VecHelper.getCenterOf(worldPosition);
         Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(level, localCenter);
 
-        scanAndPush(subLevel, parentLevel, worldCenter, facing);
+        SharedScanState shared = getSharedState(parentLevel);
+        shared.alliedSubLevels.add(subLevel);
+
+        scanAndPush(subLevel, parentLevel, worldCenter, facing, shared);
     }
 
     @Override
@@ -141,28 +153,32 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
     }
 
     private SharedScanState getSharedState(Level level) {
+        FrequencyKey key = new FrequencyKey(firstFrequency, secondFrequency);
         long currentTick = level.getGameTime();
-        SharedScanState state = LEVEL_SHARED_STATE.get(level);
+        Map<FrequencyKey, SharedScanState> freqMap =
+            LEVEL_FREQ_STATE.computeIfAbsent(level, k -> new HashMap<>());
+        SharedScanState state = freqMap.get(key);
         if (state == null || state.tickStamp != currentTick) {
             state = new SharedScanState(currentTick);
-            LEVEL_SHARED_STATE.put(level, state);
+            freqMap.put(key, state);
         }
         return state;
     }
 
-    private void scanAndPush(ServerSubLevel ownSubLevel, Level parentLevel, Vec3 center, Direction facing) {
-        SharedScanState shared = getSharedState(parentLevel);
+    private void scanAndPush(ServerSubLevel ownSubLevel, Level parentLevel, Vec3 center,
+                              Direction facing, SharedScanState shared) {
         Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
         double halfPhiRad = Math.toRadians(phi / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
+        int scanRange = flow;
 
         // 1. Scan regular entities in own cone → add to shared
-        AABB bb = new AABB(center, center).inflate(maxRange);
+        AABB bb = new AABB(center, center).inflate(scanRange);
         List<Entity> entities = parentLevel.getEntitiesOfClass(Entity.class, bb,
             e -> {
                 Vec3 d = e.position().subtract(center);
                 double dist = d.length();
-                if (dist > maxRange || dist < minRange
+                if (dist > scanRange || dist < minRange
                     || e.isShiftKeyDown()
                     || AirCurrent.isPlayerCreativeFlying(e))
                     return false;
@@ -173,13 +189,15 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
             shared.entities.add(entity);
         }
 
-        // 2. Scan other sub-levels in own cone → add to shared
+        // 2. Scan other sub-levels in own cone → add to shared (skip allied)
         if (parentLevel instanceof ServerLevel serverLevel) {
             ServerSubLevelContainer container =
                 (ServerSubLevelContainer) SubLevelContainer.getContainer(serverLevel);
             if (container != null) {
                 for (ServerSubLevel other : container.getAllSubLevels()) {
                     if (other == ownSubLevel || other.isRemoved())
+                        continue;
+                    if (shared.alliedSubLevels.contains(other))
                         continue;
 
                     org.joml.Vector3d jomlPos = new org.joml.Vector3d();
@@ -190,7 +208,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
 
                     Vec3 diff = otherCenter.subtract(center);
                     double distance = diff.length();
-                    if (distance > maxRange || distance < minRange)
+                    if (distance > scanRange || distance < minRange)
                         continue;
                     if (distance < 0.01)
                         continue;
@@ -204,13 +222,13 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
             }
         }
 
-        // 3. Push ALL shared entities from this shield's position (no cone check — radial repel)
+        // 3. Push ALL shared entities from this shield's position
         for (Entity entity : shared.entities) {
             if (!entity.isAlive())
                 continue;
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
-            if (distance > maxRange || distance < minRange
+            if (distance > scanRange || distance < minRange
                 || entity.isShiftKeyDown()
                 || AirCurrent.isPlayerCreativeFlying(entity))
                 continue;
@@ -230,39 +248,38 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
 
             Vec3 diff = otherCenter.subtract(center);
             double distance = diff.length();
-            if (distance > maxRange || distance < minRange)
+            if (distance > scanRange || distance < minRange)
                 continue;
             if (distance < 0.01)
                 continue;
 
             Vec3 dir = diff.normalize();
-            float pushStrength = (float) Math.max(maxRange - distance, 0.01);
+            float pushStrength = flow / (2.0f * (float) distance);
             pendingSubLevelForces.add(
                 new PendingForce(other, otherCenter, dir, pushStrength));
         }
 
         // 5. Maintain pushingEntities for client-side tracking (own cone only)
         for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
-            Entity entity = it.next();
-            if (!entity.isAlive()) {
+            if (!it.next().isAlive())
                 it.remove();
-            }
         }
         for (Entity entity : entities) {
-            if (!pushingEntities.contains(entity)) {
+            if (!pushingEntities.contains(entity))
                 pushingEntities.add(entity);
-            }
         }
     }
 
     private void tickClientOnly(Vec3 center, Direction facing) {
-        if (maxRange <= 0)
+        if (flow <= 0)
             return;
+
+        int scanRange = flow;
 
         if (level.random.nextInt(10) == 0) {
             Vec3 dir = Vec3.atLowerCornerOf(facing.getNormal());
-            Vec3 start = VecHelper.offsetRandomly(center, level.random, maxRange * 0.4f);
-            start = start.add(dir.scale(level.random.nextFloat() * maxRange * 0.6f));
+            Vec3 start = VecHelper.offsetRandomly(center, level.random, scanRange * 0.4f);
+            start = start.add(dir.scale(level.random.nextFloat() * scanRange * 0.6f));
             Vec3 motion = center.subtract(start).normalize().scale(0.3f);
             level.addParticle(ParticleTypes.POOF, start.x, start.y, start.z, motion.x, motion.y, motion.z);
         }
@@ -275,7 +292,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
             }
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
-            if (distance > maxRange || distance < minRange
+            if (distance > scanRange || distance < minRange
                 || entity.isShiftKeyDown()
                 || AirCurrent.isPlayerCreativeFlying(entity)) {
                 it.remove();
@@ -288,23 +305,21 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
     private void tickServer(Level scanLevel, Vec3 center, Direction facing) {
         SharedScanState shared = getSharedState(scanLevel);
 
-        // Scan own cone → populates pushingEntities, also adds to shared
         scanForEntities(scanLevel, center, facing, shared);
 
-        // Push ALL shared entities from this shield's position (no cone/LOS check — radial repel)
+        // Push ALL shared entities from this shield's position
         for (Entity entity : shared.entities) {
             if (!entity.isAlive())
                 continue;
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
-            if (distance > maxRange || distance < minRange
+            if (distance > flow || distance < minRange
                 || entity.isShiftKeyDown()
                 || AirCurrent.isPlayerCreativeFlying(entity))
                 continue;
             applyPushForce(entity, diff, (float) distance);
         }
 
-        // Clean up dead entries
         for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
             if (!it.next().isAlive())
                 it.remove();
@@ -316,13 +331,14 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         double halfPhiRad = Math.toRadians(phi / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
         boolean checkLineOfSight = !onSubLevel;
+        int scanRange = flow;
 
-        AABB bb = new AABB(center, center).inflate(maxRange);
+        AABB bb = new AABB(center, center).inflate(scanRange);
         for (Entity entity : scanLevel.getEntitiesOfClass(Entity.class, bb,
                 e -> {
                     Vec3 d = e.position().subtract(center);
                     double dist = d.length();
-                    if (dist > maxRange || dist < minRange
+                    if (dist > scanRange || dist < minRange
                         || e.isShiftKeyDown()
                         || AirCurrent.isPlayerCreativeFlying(e))
                         return false;
@@ -334,23 +350,21 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
                 continue;
             }
 
-            if (!pushingEntities.contains(entity)) {
+            if (!pushingEntities.contains(entity))
                 pushingEntities.add(entity);
-            }
             shared.entities.add(entity);
         }
 
         for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
-            Entity entity = it.next();
-            if (!entity.isAlive()) {
+            if (!it.next().isAlive())
                 it.remove();
-            }
         }
     }
 
     private void applyPushForce(Entity entity, Vec3 diff, float distance) {
         float factor = (entity instanceof ItemEntity) ? 1f / 128f : 1f / 32f;
-        Vec3 pushVec = diff.normalize().scale(Math.max(maxRange - distance, 0.01));
+        float strength = flow / (2.0f * Math.max(distance, 0.01f));
+        Vec3 pushVec = diff.normalize().scale(strength);
         entity.setDeltaMovement(entity.getDeltaMovement().add(pushVec.scale(factor)));
         entity.fallDistance = 0;
         entity.hurtMarked = true;
@@ -368,14 +382,42 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         return hit.equals(BlockPos.containing(center));
     }
 
+    // ---- Frequency management ----
+
+    public FrequencyKey getNetworkKey() {
+        return new FrequencyKey(firstFrequency, secondFrequency);
+    }
+
+    public void setFrequency(boolean first, ItemStack stack) {
+        stack = stack.copy();
+        stack.setCount(1);
+        if (first) {
+            firstFrequency = Frequency.of(stack);
+        } else {
+            secondFrequency = Frequency.of(stack);
+        }
+        setChanged();
+        sendData();
+    }
+
+    public Frequency getFirstFrequency() {
+        return firstFrequency;
+    }
+
+    public Frequency getSecondFrequency() {
+        return secondFrequency;
+    }
+
+    // ---- Parameter adjustment ----
+
     public void adjustPhi(int delta) {
         phi = Mth.clamp(phi + delta, 45, 145);
         setChanged();
         sendData();
     }
 
-    public void adjustMaxRange(int delta) {
-        maxRange = Mth.clamp(maxRange + delta, 1, 32);
+    public void adjustFlow(int delta) {
+        flow = Mth.clamp(flow + delta, 1, 32);
         setChanged();
         sendData();
     }
@@ -388,8 +430,8 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         return minRange;
     }
 
-    public int getMaxRange() {
-        return maxRange;
+    public int getFlow() {
+        return flow;
     }
 
     @Override
@@ -397,7 +439,9 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         super.write(compound, registries, clientPacket);
         compound.putInt("Phi", phi);
         compound.putInt("MinRange", minRange);
-        compound.putInt("MaxRange", maxRange);
+        compound.putInt("Flow", flow);
+        compound.put("FrequencyFirst", firstFrequency.getStack().saveOptional(registries));
+        compound.put("FrequencySecond", secondFrequency.getStack().saveOptional(registries));
     }
 
     @Override
@@ -405,6 +449,18 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         super.read(compound, registries, clientPacket);
         phi = Mth.clamp(compound.getInt("Phi"), 45, 145);
         minRange = compound.getInt("MinRange");
-        maxRange = Mth.clamp(compound.getInt("MaxRange"), 1, 32);
+        // Support both old "MaxRange" key and new "Flow" key
+        if (compound.contains("Flow"))
+            flow = Mth.clamp(compound.getInt("Flow"), 1, 32);
+        else
+            flow = Mth.clamp(compound.getInt("MaxRange"), 1, 32);
+        if (compound.contains("FrequencyFirst")) {
+            firstFrequency = Frequency.of(
+                ItemStack.parseOptional(registries, compound.getCompound("FrequencyFirst")));
+        }
+        if (compound.contains("FrequencySecond")) {
+            secondFrequency = Frequency.of(
+                ItemStack.parseOptional(registries, compound.getCompound("FrequencySecond")));
+        }
     }
 }
