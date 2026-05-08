@@ -3,10 +3,12 @@ package com.guoqiang.clockworkblock.content;
 import java.util.*;
 
 import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
+import com.guoqiang.clockworkblock.client.ShieldBlockFrequencySlot;
 import com.simibubi.create.content.kinetics.fan.AirCurrent;
 import com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler.Frequency;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
 
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
@@ -35,6 +37,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.apache.commons.lang3.tuple.Pair;
 import org.joml.Vector3d;
 
 public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySubLevelActor {
@@ -60,8 +63,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
     private int phi = 90;
     private int minRange = 0;
     private int flow = 8;
-    private Frequency firstFrequency = Frequency.EMPTY;
-    private Frequency secondFrequency = Frequency.EMPTY;
+    private ShieldLinkBehaviour link;
     private final List<Entity> pushingEntities = new ArrayList<>();
     private boolean onSubLevel;
 
@@ -78,6 +80,10 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
 
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        Pair<ValueBoxTransform, ValueBoxTransform> slots =
+            ValueBoxTransform.Dual.makeSlots(ShieldBlockFrequencySlot::new);
+        link = new ShieldLinkBehaviour(this, slots);
+        behaviours.add(link);
     }
 
     @Override
@@ -153,7 +159,7 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
     }
 
     private SharedScanState getSharedState(Level level) {
-        FrequencyKey key = new FrequencyKey(firstFrequency, secondFrequency);
+        FrequencyKey key = new FrequencyKey(getFirstFrequency(), getSecondFrequency());
         long currentTick = level.getGameTime();
         Map<FrequencyKey, SharedScanState> freqMap =
             LEVEL_FREQ_STATE.computeIfAbsent(level, k -> new HashMap<>());
@@ -384,28 +390,27 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
 
     // ---- Frequency management ----
 
+    public ShieldLinkBehaviour getLink() {
+        return link;
+    }
+
     public FrequencyKey getNetworkKey() {
-        return new FrequencyKey(firstFrequency, secondFrequency);
+        if (link == null)
+            return new FrequencyKey(Frequency.EMPTY, Frequency.EMPTY);
+        return new FrequencyKey(link.frequencyFirst, link.frequencyLast);
     }
 
     public void setFrequency(boolean first, ItemStack stack) {
-        stack = stack.copy();
-        stack.setCount(1);
-        if (first) {
-            firstFrequency = Frequency.of(stack);
-        } else {
-            secondFrequency = Frequency.of(stack);
-        }
-        setChanged();
-        sendData();
+        if (link != null)
+            link.setFrequency(first, stack);
     }
 
     public Frequency getFirstFrequency() {
-        return firstFrequency;
+        return link != null ? link.frequencyFirst : Frequency.EMPTY;
     }
 
     public Frequency getSecondFrequency() {
-        return secondFrequency;
+        return link != null ? link.frequencyLast : Frequency.EMPTY;
     }
 
     // ---- Parameter adjustment ----
@@ -440,8 +445,6 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         compound.putInt("Phi", phi);
         compound.putInt("MinRange", minRange);
         compound.putInt("Flow", flow);
-        compound.put("FrequencyFirst", firstFrequency.getStack().saveOptional(registries));
-        compound.put("FrequencySecond", secondFrequency.getStack().saveOptional(registries));
     }
 
     @Override
@@ -449,18 +452,9 @@ public class ShieldBlockEntity extends SmartBlockEntity implements BlockEntitySu
         super.read(compound, registries, clientPacket);
         phi = Mth.clamp(compound.getInt("Phi"), 45, 145);
         minRange = compound.getInt("MinRange");
-        // Support both old "MaxRange" key and new "Flow" key
         if (compound.contains("Flow"))
             flow = Mth.clamp(compound.getInt("Flow"), 1, 32);
         else
             flow = Mth.clamp(compound.getInt("MaxRange"), 1, 32);
-        if (compound.contains("FrequencyFirst")) {
-            firstFrequency = Frequency.of(
-                ItemStack.parseOptional(registries, compound.getCompound("FrequencyFirst")));
-        }
-        if (compound.contains("FrequencySecond")) {
-            secondFrequency = Frequency.of(
-                ItemStack.parseOptional(registries, compound.getCompound("FrequencySecond")));
-        }
     }
 }

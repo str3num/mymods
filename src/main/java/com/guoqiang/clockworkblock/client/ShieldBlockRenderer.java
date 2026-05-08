@@ -2,13 +2,19 @@ package com.guoqiang.clockworkblock.client;
 
 import com.guoqiang.clockworkblock.content.ShieldBlock;
 import com.guoqiang.clockworkblock.content.ShieldBlockEntity;
+import com.guoqiang.clockworkblock.content.ShieldLinkBehaviour;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.datafixers.util.Pair;
 import com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler.Frequency;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueBox;
 import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxRenderer;
+import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
 
+import net.createmod.catnip.data.Iterate;
 import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
@@ -23,42 +29,40 @@ import net.minecraft.world.phys.Vec3;
 
 public class ShieldBlockRenderer implements BlockEntityRenderer<ShieldBlockEntity> {
 
-    private final ShieldBlockFrequencySlot firstSlot = new ShieldBlockFrequencySlot(true);
-    private final ShieldBlockFrequencySlot secondSlot = new ShieldBlockFrequencySlot(false);
-
     public ShieldBlockRenderer(BlockEntityRendererProvider.Context context) {
     }
 
     @Override
     public void render(ShieldBlockEntity be, float partialTick, PoseStack ms,
                        MultiBufferSource buffer, int light, int overlay) {
-        if (be.getLevel() == null)
+        if (be == null || be.isRemoved() || be.getLevel() == null)
             return;
 
         BlockState state = be.getBlockState();
         if (!(state.getBlock() instanceof ShieldBlock))
             return;
 
-        BlockPos pos = be.getBlockPos();
-
-        renderSlot(be.getFirstFrequency(), firstSlot, be, pos, state, ms, buffer, light, overlay);
-        renderSlot(be.getSecondFrequency(), secondSlot, be, pos, state, ms, buffer, light, overlay);
-    }
-
-    private void renderSlot(Frequency freq, ShieldBlockFrequencySlot slot, ShieldBlockEntity be,
-                            BlockPos pos, BlockState state, PoseStack ms,
-                            MultiBufferSource buffer, int light, int overlay) {
-        ItemStack stack = freq.getStack();
-        if (stack.isEmpty())
+        ShieldLinkBehaviour link = be.getLink();
+        if (link == null)
             return;
 
-        ms.pushPose();
-        slot.transform(be.getLevel(), pos, state, ms);
-        ValueBoxRenderer.renderItemIntoValueBox(stack, ms, buffer, light, overlay);
-        ms.popPose();
+        BlockPos pos = be.getBlockPos();
+        for (boolean first : Iterate.trueAndFalse) {
+            ValueBoxTransform transform = first ? link.firstSlot : link.secondSlot;
+            ItemStack stack = first ? link.frequencyFirst.getStack() : link.frequencyLast.getStack();
+
+            // Compute light at the item's actual world position (outside the block face)
+            Vec3 localOffset = transform.getLocalOffset(be.getLevel(), pos, state);
+            Vec3 worldPos = Vec3.atLowerCornerOf(pos).add(localOffset);
+            int itemLight = LevelRenderer.getLightColor(be.getLevel(), BlockPos.containing(worldPos));
+
+            ms.pushPose();
+            transform.transform(be.getLevel(), pos, state, ms);
+            ValueBoxRenderer.renderItemIntoValueBox(stack, ms, buffer, itemLight, overlay);
+            ms.popPose();
+        }
     }
 
-    /** Called every client tick to show interactive slot outlines when the player looks at the block. */
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null)
@@ -73,29 +77,34 @@ public class ShieldBlockRenderer implements BlockEntityRenderer<ShieldBlockEntit
         if (!(state.getBlock() instanceof ShieldBlock))
             return;
 
-        if (!(mc.level.getBlockEntity(pos) instanceof ShieldBlockEntity be))
+        ShieldLinkBehaviour link = BlockEntityBehaviour.get(mc.level, pos, ShieldLinkBehaviour.TYPE);
+        if (link == null)
             return;
 
+        Component labelFirst = Component.translatable(
+            "block.clockworkblock.shield_block.frequency_first");
+        Component labelSecond = Component.translatable(
+            "block.clockworkblock.shield_block.frequency_second");
+
         Vec3 localHit = blockHit.getLocation().subtract(Vec3.atLowerCornerOf(pos));
-        ShieldBlockFrequencySlot slot1 = new ShieldBlockFrequencySlot(true);
-        ShieldBlockFrequencySlot slot2 = new ShieldBlockFrequencySlot(false);
 
-        for (int i = 0; i < 2; i++) {
-            boolean isFirst = (i == 0);
-            ShieldBlockFrequencySlot slot = isFirst ? slot1 : slot2;
-            Frequency freq = isFirst ? be.getFirstFrequency() : be.getSecondFrequency();
+        for (boolean first : Iterate.trueAndFalse) {
+            ValueBoxTransform transform = first ? link.firstSlot : link.secondSlot;
+            Frequency freq = first ? link.frequencyFirst : link.frequencyLast;
 
-            boolean hitSlot = slot.testHit(mc.level, pos, state, localHit);
+            boolean hitSlot = transform.testHit(mc.level, pos, state, localHit);
 
-            Component label = Component.translatable(isFirst
-                ? "block.clockworkblock.shield_block.frequency_first"
-                : "block.clockworkblock.shield_block.frequency_second");
+            Component label = first ? labelFirst : labelSecond;
             AABB bounds = new AABB(Vec3.ZERO, Vec3.ZERO).inflate(0.25);
-            ValueBox box = new ValueBox(label, bounds, pos).transform(slot).passive(!hitSlot);
+            ValueBox box = new ValueBox(label, bounds, pos)
+                .transform(transform)
+                .passive(!hitSlot);
             if (!freq.getStack().isEmpty())
                 box.wideOutline();
 
-            Outliner.getInstance().showOutline(box, box).highlightFace(blockHit.getDirection());
+            Outliner.getInstance()
+                .showOutline(Pair.of(first, pos), box)
+                .highlightFace(blockHit.getDirection());
         }
     }
 }
