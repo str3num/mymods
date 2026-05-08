@@ -5,7 +5,7 @@
   "tooltip.clockworkblock.energy": "Energy: %s / %s SU·tick",
   "tooltip.clockworkblock.stored_energy": "Stored Energy",
   "tooltip.clockworkblock.power": "Power: %s SU",
-  "tooltip.clockworkblock.power_label": "Current Power",
+  "tooltip.clockworkblock.power_label": "Input Power",
   "tooltip.clockworkblock.power_cap": "Current Max Power",
   "tooltip.clockworkblock.power_value": "Power Multiplier",
   "tooltip.clockworkblock.required_speed": "Required Minimum Speed",
@@ -16,5 +16,6 @@
   "message.clockworkblock.shield_phi": "Shield angle: %s degrees",
   "message.clockworkblock.shield_flow": "Shield flow: %s",
   "block.clockworkblock.shield_block.frequency_first": "First Frequency",
-  "block.clockworkblock.shield_block.frequency_second": "Second Frequency"
+  "block.clockworkblock.shield_block.frequency_second": "Second Frequency",
+  "message.clockworkblock.shield_range": "Shield range: %s blocks"
 }

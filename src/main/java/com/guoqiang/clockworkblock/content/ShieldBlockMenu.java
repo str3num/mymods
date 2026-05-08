@@ -16,12 +16,14 @@ public class ShieldBlockMenu extends AbstractContainerMenu {
     private final BlockPos pos;
     private int phi;
     private int flow;
+    private int range;
 
-    public ShieldBlockMenu(int id, Inventory inv, BlockPos pos, int phi, int flow) {
+    public ShieldBlockMenu(int id, Inventory inv, BlockPos pos, int phi, int flow, int range) {
         super(ClockworkMenuTypes.SHIELD_BLOCK.get(), id);
         this.pos = pos;
         this.phi = phi;
         this.flow = flow;
+        this.range = range;
     }
 
     public ShieldBlockMenu(int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
@@ -29,6 +31,7 @@ public class ShieldBlockMenu extends AbstractContainerMenu {
         this.pos = extraData.readBlockPos();
         this.phi = extraData.readInt();
         this.flow = extraData.readInt();
+        this.range = extraData.readInt();
     }
 
     @Override
@@ -41,15 +44,17 @@ public class ShieldBlockMenu extends AbstractContainerMenu {
         if (!(be instanceof ShieldBlockEntity shield))
             return false;
 
-        switch (buttonId) {
-            case 0: shield.adjustPhi(-15); break;
-            case 1: shield.adjustPhi(15);  break;
-            case 2: shield.adjustFlow(-2); break;
-            case 3: shield.adjustFlow(2);  break;
+        int paramIndex = buttonId >> 8;
+        int value = buttonId & 0xFF;
+        switch (paramIndex) {
+            case 0 -> shield.setPhi(value);
+            case 1 -> shield.setFlow(value);
+            case 2 -> shield.setRange(value);
         }
 
         this.phi = shield.getPhi();
         this.flow = shield.getFlow();
+        this.range = shield.getRange();
 
         return true;
     }
@@ -60,6 +65,10 @@ public class ShieldBlockMenu extends AbstractContainerMenu {
 
     public int getFlow() {
         return flow;
+    }
+
+    public int getRange() {
+        return range;
     }
 
     public BlockPos getBlockPos() {

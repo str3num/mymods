@@ -3,7 +3,7 @@ package com.guoqiang.clockworkblock.client;
 import com.guoqiang.clockworkblock.content.ShieldBlockMenu;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -14,20 +14,21 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
     private static final ResourceLocation BACKGROUND =
         ResourceLocation.withDefaultNamespace("textures/gui/demo_background.png");
     private static final int BG_WIDTH = 176;
-    private static final int BG_HEIGHT = 100;
+    private static final int BG_HEIGHT = 120;
 
-    private Button phiMinus;
-    private Button phiPlus;
-    private Button flowMinus;
-    private Button flowPlus;
+    private ShieldSlider phiSlider;
+    private ShieldSlider flowSlider;
+    private ShieldSlider rangeSlider;
 
     private int phi;
     private int flow;
+    private int range;
 
     public ShieldBlockScreen(ShieldBlockMenu menu, Inventory inv, Component title) {
         super(menu, inv, title);
         this.phi = menu.getPhi();
         this.flow = menu.getFlow();
+        this.range = menu.getRange();
     }
 
     @Override
@@ -39,30 +40,21 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         int x = getGuiLeft();
         int y = getGuiTop();
 
-        phiMinus = Button.builder(Component.literal("-"), btn -> {
-            minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 0);
-            phi = Math.max(45, phi - 15);
-        }).pos(x + 100, y + 30).size(20, 20).build();
+        phiSlider = new ShieldSlider(x + 10, y + 25, 156, 20,
+            Component.translatable("message.clockworkblock.shield_phi", "").getString(),
+            0, 45, 270, phi);
 
-        phiPlus = Button.builder(Component.literal("+"), btn -> {
-            minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 1);
-            phi = Math.min(145, phi + 15);
-        }).pos(x + 150, y + 30).size(20, 20).build();
+        flowSlider = new ShieldSlider(x + 10, y + 55, 156, 20,
+            Component.translatable("message.clockworkblock.shield_flow", "").getString(),
+            1, 1, 32, flow);
 
-        flowMinus = Button.builder(Component.literal("-"), btn -> {
-            minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 2);
-            flow = Math.max(1, flow - 2);
-        }).pos(x + 100, y + 60).size(20, 20).build();
+        rangeSlider = new ShieldSlider(x + 10, y + 85, 156, 20,
+            Component.translatable("message.clockworkblock.shield_range", "").getString(),
+            2, 1, 32, range);
 
-        flowPlus = Button.builder(Component.literal("+"), btn -> {
-            minecraft.gameMode.handleInventoryButtonClick(menu.containerId, 3);
-            flow = Math.min(32, flow + 2);
-        }).pos(x + 150, y + 60).size(20, 20).build();
-
-        addRenderableWidget(phiMinus);
-        addRenderableWidget(phiPlus);
-        addRenderableWidget(flowMinus);
-        addRenderableWidget(flowPlus);
+        addRenderableWidget(phiSlider);
+        addRenderableWidget(flowSlider);
+        addRenderableWidget(rangeSlider);
     }
 
     @Override
@@ -80,17 +72,9 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         super.render(graphics, mouseX, mouseY, partialTick);
         renderTooltip(graphics, mouseX, mouseY);
 
-        int x = getGuiLeft();
-        int y = getGuiTop();
-
-        Component title = Component.translatable("block.clockworkblock.shield_block");
-        graphics.drawString(font, title, x + 8, y + 5, 0xFFFFFF, false);
-
-        Component phiLabel = Component.translatable("message.clockworkblock.shield_phi", phi);
-        graphics.drawString(font, phiLabel, x + 8, y + 34, 0xA0A0A0, false);
-
-        Component flowLabel = Component.translatable("message.clockworkblock.shield_flow", flow);
-        graphics.drawString(font, flowLabel, x + 8, y + 64, 0xA0A0A0, false);
+        graphics.drawString(font,
+            Component.translatable("block.clockworkblock.shield_block"),
+            getGuiLeft() + 8, getGuiTop() + 5, 0xFFFFFF, false);
     }
 
     @Override
@@ -98,9 +82,50 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         super.containerTick();
         if (menu.getPhi() != phi) {
             phi = menu.getPhi();
+            phiSlider.setValue(phi);
         }
         if (menu.getFlow() != flow) {
             flow = menu.getFlow();
+            flowSlider.setValue(flow);
+        }
+        if (menu.getRange() != range) {
+            range = menu.getRange();
+            rangeSlider.setValue(range);
+        }
+    }
+
+    private class ShieldSlider extends AbstractSliderButton {
+        private final String prefix;
+        private final int paramIndex;
+        private final int min;
+        private final int max;
+
+        ShieldSlider(int x, int y, int width, int height, String prefix,
+                     int paramIndex, int min, int max, int current) {
+            super(x, y, width, height,
+                Component.literal(prefix + current),
+                (current - min) / (double)(max - min));
+            this.prefix = prefix;
+            this.paramIndex = paramIndex;
+            this.min = min;
+            this.max = max;
+        }
+
+        void setValue(int val) {
+            value = (val - min) / (double)(max - min);
+            updateMessage();
+        }
+
+        @Override
+        protected void updateMessage() {
+            int val = (int) Math.round(min + value * (max - min));
+            setMessage(Component.literal(prefix + val));
+        }
+
+        @Override
+        protected void applyValue() {
+            int val = (int) Math.round(min + value * (max - min));
+            minecraft.gameMode.handleInventoryButtonClick(menu.containerId, (paramIndex << 8) | val);
         }
     }
 }

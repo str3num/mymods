@@ -5,7 +5,7 @@
   "tooltip.clockworkblock.energy": "能量：%s / %s SU·tick",
   "tooltip.clockworkblock.stored_energy": "储存能量",
   "tooltip.clockworkblock.power": "功率：%s SU",
-  "tooltip.clockworkblock.power_label": "当前功率",
+  "tooltip.clockworkblock.power_label": "输入功率",
   "tooltip.clockworkblock.power_cap": "当前最大功率",
   "tooltip.clockworkblock.power_value": "功率倍率",
   "tooltip.clockworkblock.required_speed": "所需最低转速",
@@ -16,5 +16,6 @@
   "message.clockworkblock.shield_phi": "斥力角度：%s 度",
   "message.clockworkblock.shield_flow": "斥力流量：%s",
   "block.clockworkblock.shield_block.frequency_first": "第一频率",
-  "block.clockworkblock.shield_block.frequency_second": "第二频率"
+  "block.clockworkblock.shield_block.frequency_second": "第二频率",
+  "message.clockworkblock.shield_range": "斥力范围：%s 格"
 }

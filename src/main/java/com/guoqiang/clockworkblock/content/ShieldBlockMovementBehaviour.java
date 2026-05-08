@@ -37,12 +37,17 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
         Direction facing = state.getValue(ShieldBlock.FACING);
         CompoundTag data = context.blockEntityData;
 
-        int phi = Mth.clamp(data.getInt("Phi"), 45, 145);
+        int phi = Mth.clamp(data.getInt("Phi"), 45, 270);
         int flow;
         if (data.contains("Flow"))
             flow = Mth.clamp(data.getInt("Flow"), 1, 32);
         else
             flow = Mth.clamp(data.getInt("MaxRange"), 1, 32);
+        int range;
+        if (data.contains("Range"))
+            range = Mth.clamp(data.getInt("Range"), 1, 32);
+        else
+            range = 8;
 
         @SuppressWarnings("unchecked")
         List<Entity> pushing = (List<Entity>) context.temporaryData;
@@ -51,7 +56,7 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
             context.temporaryData = pushing;
         }
 
-        scanAndPush(context.world, center, facing, phi, flow, pushing);
+        scanAndPush(context.world, center, facing, phi, flow, range, pushing);
     }
 
     private Vec3 getWorldCenter(MovementContext context) {
@@ -65,12 +70,12 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
     }
 
     private void scanAndPush(net.minecraft.world.level.Level world, Vec3 center,
-                             Direction facing, int phi, int flow,
+                             Direction facing, int phi, int flow, int range,
                              List<Entity> pushing) {
         Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
         double halfPhiRad = Math.toRadians(phi / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
-        int scanRange = flow;
+        int scanRange = range;
 
         AABB bb = new AABB(center, center).inflate(scanRange);
         for (Entity entity : world.getEntitiesOfClass(Entity.class, bb,
@@ -105,8 +110,18 @@ public class ShieldBlockMovementBehaviour implements MovementBehaviour {
                 it.remove();
                 continue;
             }
-            float factor = (entity instanceof ItemEntity) ? 1f / 128f : 1f / 32f;
-            float strength = flow / (2.0f * Math.max((float) distance, 0.01f));
+            float factor;
+            float strength;
+            if (entity instanceof net.minecraft.world.entity.LivingEntity) {
+                factor = 1f / 4f;
+                strength = flow / (2f * Math.max((float) distance, 0.01f));
+            } else if (entity instanceof ItemEntity) {
+                factor = 1f / 128f;
+                strength = flow * (float)(Math.cos(distance / range + Math.PI / 2) + 1.0);
+            } else {
+                factor = 1f / 32f;
+                strength = flow * (float)(Math.cos(distance / range + Math.PI / 2) + 1.0);
+            }
             Vec3 pushVec = diff.normalize().scale(strength);
             entity.setDeltaMovement(entity.getDeltaMovement().add(pushVec.scale(factor)));
             entity.fallDistance = 0;

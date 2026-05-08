@@ -55,13 +55,13 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
         powerValue = new ScrollValueBehaviour(
-            CreateLang.translateDirect("tooltip.clockworkblock.power_value"),
+            CreateLang.translateDirect("tooltip.clockworkblock.power_label"),
             this,
             new PowerValueBox()
         );
         powerValue.between(1, MAX_POWER_STEP);
         powerValue.value = getPowerStep();
-        powerValue.withFormatter(value -> value + " * " + POWER_PER_RPM);
+        powerValue.withFormatter(value -> value + " × 256 = " + (value * 256));
         powerValue.withCallback(value -> {
             configuredPower = powerFromStep(value);
             if (level != null && !level.isClientSide) {
@@ -211,24 +211,6 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
             .text(ChatFormatting.DARK_GRAY, " SU")
             .forGoggles(tooltip, 1);
 
-        CreateLang.translate("tooltip.clockworkblock.power_cap")
-            .style(ChatFormatting.GRAY)
-            .forGoggles(tooltip);
-
-        CreateLang.builder()
-            .add(CreateLang.number(getCurrentMaxPower()).style(ChatFormatting.AQUA))
-            .text(ChatFormatting.DARK_GRAY, " SU")
-            .forGoggles(tooltip, 1);
-
-        CreateLang.translate("tooltip.clockworkblock.required_speed")
-            .style(ChatFormatting.GRAY)
-            .forGoggles(tooltip);
-
-        CreateLang.builder()
-            .add(CreateLang.number(getRequiredSpeed()).style(ChatFormatting.AQUA))
-            .text(ChatFormatting.DARK_GRAY, " rpm")
-            .forGoggles(tooltip, 1);
-
         return true;
     }
 
@@ -291,7 +273,8 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     }
 
     private boolean isChargingLoadActive() {
-        return !hasRedstoneSignal() && !isEnergyFull() && isInputSourceValid() && canEnableCharging();
+        return !hasRedstoneSignal() && !isEnergyFull() && hasNetwork()
+            && Math.abs(getSpeed()) > 0;
     }
 
     private boolean isEnergyFull() {
@@ -307,13 +290,10 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     }
 
     private int getDischargeCost() {
-        if (!hasNetwork()) {
+        if (!hasNetwork() || !shouldDischarge()) {
             return 0;
         }
-        if (stress <= 0) {
-            return 0;
-        }
-        return Mth.ceil(stress);
+        return Math.max(1, Mth.ceil(stress));
     }
 
     private float getGeneratedStressCapacity() {
@@ -333,18 +313,6 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
         sendData();
     }
 
-    public int getCurrentMaxPower() {
-        return Math.min(MAX_POWER, Math.abs(Mth.floor(getSpeed())) * POWER_PER_RPM);
-    }
-
-    public int getRequiredSpeed() {
-        return Mth.ceil(getPower() / (float) POWER_PER_RPM);
-    }
-
-    private boolean canEnableCharging() {
-        return getCurrentMaxPower() >= getPower();
-    }
-
     private int getPowerStep() {
         return stepFromPower(configuredPower);
     }
@@ -355,14 +323,6 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
 
     private static int powerFromStep(int step) {
         return Mth.clamp(step, 1, MAX_POWER_STEP) * POWER_PER_RPM;
-    }
-
-    private boolean isInputSourceValid() {
-        if (!hasSource()) {
-            return false;
-        }
-        BlockPos expectedInputPos = worldPosition.relative(ClockworkBlock.getInputFace(getBlockState()));
-        return expectedInputPos.equals(source);
     }
 
     private void syncPoweredState(boolean powered) {

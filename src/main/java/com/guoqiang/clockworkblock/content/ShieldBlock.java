@@ -2,11 +2,12 @@ package com.guoqiang.clockworkblock.content;
 
 import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 import com.simibubi.create.api.behaviour.movement.MovementBehaviour;
+import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
-import com.simibubi.create.foundation.block.WrenchableDirectionalBlock;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Direction.Axis;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -19,12 +20,13 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
-public class ShieldBlock extends WrenchableDirectionalBlock implements IBE<ShieldBlockEntity> {
+public class ShieldBlock extends DirectionalKineticBlock implements IBE<ShieldBlockEntity> {
 
     public ShieldBlock(Properties properties) {
         super(properties);
@@ -37,26 +39,37 @@ public class ShieldBlock extends WrenchableDirectionalBlock implements IBE<Shiel
     }
 
     @Override
+    public boolean hasShaftTowards(LevelReader world, BlockPos pos, BlockState state, Direction face) {
+        return face == state.getValue(FACING).getOpposite();
+    }
+
+    @Override
+    public Axis getRotationAxis(BlockState state) {
+        return state.getValue(FACING).getAxis();
+    }
+
+    @Override
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
         return InteractionResult.FAIL;
     }
 
-    /** Blue face (right side): angle/flow adjustment via GUI. */
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
+        /** Blue face (right side): angle/flow/range adjustment via GUI. */
         if (hitResult.getDirection() != getAngleFace(state))
             return InteractionResult.PASS;
 
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
             withBlockEntityDo(level, pos, be ->
                 serverPlayer.openMenu(new SimpleMenuProvider(
-                    (id, inv, p) -> new ShieldBlockMenu(id, inv, pos, be.getPhi(), be.getFlow()),
+                    (id, inv, p) -> new ShieldBlockMenu(id, inv, pos, be.getPhi(), be.getFlow(), be.getRange()),
                     Component.translatable("block.clockworkblock.shield_block")
                 ), buf -> {
                     buf.writeBlockPos(pos);
                     buf.writeInt(be.getPhi());
                     buf.writeInt(be.getFlow());
+                    buf.writeInt(be.getRange());
                 })
             );
         }
