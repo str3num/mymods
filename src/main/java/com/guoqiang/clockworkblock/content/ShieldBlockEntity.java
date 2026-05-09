@@ -27,12 +27,14 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -48,12 +50,19 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     /** Per-level, per-frequency shared scan state. Cleared each game tick. */
     private static final Map<Level, Map<FrequencyKey, SharedScanState>> LEVEL_FREQ_STATE = new WeakHashMap<>();
 
+    /** One-tick-delayed sub-level frequency cache. Built this tick, used next tick for allied discovery. */
+    private static Map<Level, Map<FrequencyKey, Set<ServerSubLevel>>> ALLY_CACHE = new HashMap<>();
+    private static Map<Level, Map<FrequencyKey, Set<ServerSubLevel>>> ALLY_CACHE_NEXT = new HashMap<>();
+    private static long allyCacheTick = -1;
+
     private static class SharedScanState {
         final long tickStamp;
         final Set<Entity> entities = new HashSet<>();
         final Set<ServerSubLevel> subLevels = new HashSet<>();
         /** Sub-levels that contain a shield with this frequency — excluded from pushing */
         final Set<ServerSubLevel> alliedSubLevels = new HashSet<>();
+
+        boolean alliedDiscoveryDone;
 
         SharedScanState(long tickStamp) {
             this.tickStamp = tickStamp;
@@ -69,7 +78,6 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     private boolean onSubLevel;
     private dev.ryanhcode.sable.sublevel.SubLevel cachedSubLevel;
     private float lastStressSpeed;
-    private boolean updatingStress;
 
     private record PendingSubLevelTarget(ServerSubLevel target, Vec3 shieldWorldCenter) {}
     private final List<PendingSubLevelTarget> pendingSubLevelTargets = new ArrayList<>();
@@ -82,6 +90,14 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
 
     public ShieldBlockEntity(BlockPos pos, BlockState state) {
         this(ClockworkBlockEntityTypes.SHIELD_BLOCK.get(), pos, state);
+    }
+
+    @Override
+    public void initialize() {
+        super.initialize();
+        if (level != null && !level.isClientSide) {
+            sendData();
+        }
     }
 
     @Override
@@ -99,13 +115,18 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         if (level == null)
             return;
 
-        // Update stress contribution when speed changes
-        float curSpeed = Math.abs(getSpeed());
-        if (curSpeed > 0 && curSpeed != lastStressSpeed && hasNetwork() && !updatingStress) {
-            lastStressSpeed = curSpeed;
-            updatingStress = true;
-            getOrCreateNetwork().updateStressFor(this, calculateStressApplied());
-            updatingStress = false;
+        // Promote previous tick's sub-level cache so tickServer can read it
+        if (!level.isClientSide) {
+            swapAllyCache(level);
+        }
+
+        // Register stress with the network when speed changes
+        if (!level.isClientSide && hasNetwork()) {
+            float speed = Math.abs(getSpeed());
+            if (speed > 0 && speed != lastStressSpeed) {
+                lastStressSpeed = speed;
+                getOrCreateNetwork().updateStressFor(this, calculateStressApplied());
+            }
         }
 
         if (!onSubLevel) {
@@ -142,6 +163,11 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         if (!state.hasProperty(ShieldBlock.FACING))
             return;
 
+        FrequencyKey myKey = getNetworkKey();
+
+        // Always cache sub-level for allied detection, even when inactive
+        cacheForNextTick(parentLevel, myKey, subLevel);
+
         if (Math.abs(getSpeed()) <= 0)
             return;
 
@@ -150,8 +176,14 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(level, localCenter);
 
         SharedScanState shared = getSharedState(parentLevel);
-        shared.alliedSubLevels.add(subLevel);
 
+        // Phase 1: discover ALL allied sub-levels from PREVIOUS tick's cache
+        if (!shared.alliedDiscoveryDone) {
+            shared.alliedDiscoveryDone = true;
+            discoverAlliedSubLevels(parentLevel, myKey, shared);
+        }
+
+        shared.alliedSubLevels.add(subLevel);
         scanAndPush(subLevel, parentLevel, worldCenter, facingVec, shared);
     }
 
@@ -285,6 +317,31 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             freqMap.put(key, state);
         }
         return state;
+    }
+
+    private void discoverAlliedSubLevels(Level parentLevel, FrequencyKey key, SharedScanState shared) {
+        Map<FrequencyKey, Set<ServerSubLevel>> freqMap = ALLY_CACHE.get(parentLevel);
+        if (freqMap == null) return;
+        Set<ServerSubLevel> allies = freqMap.get(key);
+        if (allies != null) {
+            shared.alliedSubLevels.addAll(allies);
+        }
+    }
+
+    private static void swapAllyCache(Level level) {
+        long t = level.getGameTime();
+        if (t != allyCacheTick) {
+            allyCacheTick = t;
+            ALLY_CACHE = ALLY_CACHE_NEXT;
+            ALLY_CACHE_NEXT = new HashMap<>();
+        }
+    }
+
+    private static void cacheForNextTick(Level level, FrequencyKey key, ServerSubLevel subLevel) {
+        ALLY_CACHE_NEXT
+            .computeIfAbsent(level, k -> new HashMap<>())
+            .computeIfAbsent(key, k -> new HashSet<>())
+            .add(subLevel);
     }
 
     private void scanAndPush(ServerSubLevel ownSubLevel, Level parentLevel, Vec3 center,
@@ -458,6 +515,14 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                     if (other.isRemoved())
                         continue;
 
+                    // Skip allied sub-levels (contain a shield with matching frequency)
+                    Map<FrequencyKey, Set<ServerSubLevel>> freqMap = ALLY_CACHE.get(scanLevel);
+                    if (freqMap != null) {
+                        Set<ServerSubLevel> allies = freqMap.get(getNetworkKey());
+                        if (allies != null && allies.contains(other))
+                            continue;
+                    }
+
                     org.joml.Vector3d otherLocal = JOMLConversion.toJOML(
                         other.getPlot().getCenterBlock().getCenter());
                     org.joml.Vector3d otherWorld = new org.joml.Vector3d();
@@ -629,6 +694,30 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         return load;
     }
 
+    @Override
+    public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
+        float stressAtBase = calculateStressApplied();
+        float speed = Math.abs(getSpeed());
+
+        com.simibubi.create.foundation.utility.CreateLang.translate("gui.goggles.kinetic_stats")
+            .forGoggles(tooltip);
+
+        com.simibubi.create.foundation.utility.CreateLang.translate("tooltip.stressImpact")
+            .style(net.minecraft.ChatFormatting.GRAY)
+            .forGoggles(tooltip);
+
+        float stressTotal = stressAtBase * Math.abs(getTheoreticalSpeed());
+
+        com.simibubi.create.foundation.utility.CreateLang.number(stressTotal)
+            .translate("generic.unit.stress")
+            .style(speed == 0 ? net.minecraft.ChatFormatting.DARK_GRAY : net.minecraft.ChatFormatting.AQUA)
+            .space()
+            .add(com.simibubi.create.foundation.utility.CreateLang.translate("gui.goggles.at_current_speed")
+                .style(net.minecraft.ChatFormatting.DARK_GRAY))
+            .forGoggles(tooltip, 1);
+
+        return true;
+    }
 
     public void setPhi(int phi) {
         this.phi = Mth.clamp(phi, 45, 270);
@@ -641,7 +730,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         setChanged();
         sendData();
         if (level != null && !level.isClientSide && hasNetwork())
-            getOrCreateNetwork().updateNetwork();
+            getOrCreateNetwork().updateStressFor(this, calculateStressApplied());
     }
 
     public void setRange(int range) {
@@ -649,7 +738,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         setChanged();
         sendData();
         if (level != null && !level.isClientSide && hasNetwork())
-            getOrCreateNetwork().updateNetwork();
+            getOrCreateNetwork().updateStressFor(this, calculateStressApplied());
     }
 
     public int getPhi() {
