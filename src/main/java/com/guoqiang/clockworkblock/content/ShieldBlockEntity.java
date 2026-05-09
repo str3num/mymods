@@ -81,6 +81,17 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
 
     private record PendingSubLevelTarget(ServerSubLevel target, Vec3 shieldWorldCenter) {}
     private final List<PendingSubLevelTarget> pendingSubLevelTargets = new ArrayList<>();
+
+    public static class RippleEffect {
+        public final Vec3 worldPos;
+        public final float startTime;
+        public final float maxRadius;
+        public final int color;
+        public RippleEffect(Vec3 worldPos, float startTime, float maxRadius, int color) {
+            this.worldPos = worldPos; this.startTime = startTime; this.maxRadius = maxRadius; this.color = color;
+        }
+    }
+    public final List<RippleEffect> ripples = new ArrayList<>();
     private double pushDampingRatio = 0.3;
     private double pushAccelLimit = 500;
 
@@ -432,9 +443,74 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         }
     }
 
+    private final java.util.Map<java.util.UUID, Float> prevEntityDist = new java.util.HashMap<>();
+
     private void tickClientOnly(Vec3 center, Vec3 facingVec) {
         if (flow <= 0)
             return;
+
+        // Entity boundary crossing detection for ripple effects
+        float currentTime = level.getGameTime();
+        int rRange = range;
+        if (rRange > 0) {
+            double halfPhiRad = Math.toRadians(phi / 2.0);
+            double cosHalfPhi = Math.cos(halfPhiRad);
+            float scanR = Math.max(rRange * 3, 8);
+            java.util.Set<java.util.UUID> seenIds = new java.util.HashSet<>();
+            for (Entity entity : level.getEntitiesOfClass(Entity.class,
+                    new AABB(center, center).inflate(scanR), e -> e.isAlive())) {
+                Vec3 diff = entity.position().subtract(center);
+                double dist = diff.length();
+                java.util.UUID id = entity.getUUID();
+                seenIds.add(id);
+                if (dist < 0.5) continue;
+                Vec3 dir = diff.normalize();
+                if (dir.dot(facingVec) < cosHalfPhi) continue;
+                if (dist > rRange * 3) continue;
+
+                float normDist = (float)(dist / rRange);
+                Float prev = prevEntityDist.get(id);
+                if (prev != null) {
+                    boolean wasInside = prev < 1.0f;
+                    boolean isInside = dist < rRange;
+                    if (wasInside != isInside) {
+                        // Record ripple for continuous particle spawning each tick
+                        Vec3 impact = center.add(dir.scale(rRange));
+                        ripples.add(new RippleEffect(impact, currentTime, rRange * 3.0f / 32f, 0xAADDFF));
+                    }
+                }
+                if (dist < rRange * 3)
+                    prevEntityDist.put(id, normDist);
+            }
+            prevEntityDist.keySet().removeIf(id -> !seenIds.contains(id));
+        }
+
+        // Per-tick: spawn expanding ring particles with outward velocity
+        for (java.util.Iterator<RippleEffect> rit = ripples.iterator(); rit.hasNext(); ) {
+            RippleEffect ripple = rit.next();
+            float age = currentTime - ripple.startTime;
+            if (age > 3.0f) { rit.remove(); continue; }
+            // Every 10 ticks, spawn a new ring at 0.3-0.4 that expands outward fast
+            if ((int)age % 10 == 0) {
+                Vec3 radialDir = ripple.worldPos.subtract(center).normalize();
+                Vec3 refUp = Math.abs(radialDir.y) < 0.9f ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
+                Vec3 tanA = refUp.cross(radialDir).normalize();
+                Vec3 tanB = radialDir.cross(tanA);
+                float speed = 12f * rRange / 32f;
+                for (int p = 0; p < 30; p++) {
+                    double angle = level.random.nextDouble() * 2 * Math.PI;
+                    double ox = Math.cos(angle) * (0.35f + (float)(level.random.nextDouble() - 0.5) * 0.1f);
+                    double oz = Math.sin(angle) * (0.35f + (float)(level.random.nextDouble() - 0.5) * 0.1f);
+                    float px = (float)(ripple.worldPos.x + tanA.x * ox + tanB.x * oz);
+                    float py = (float)(ripple.worldPos.y + tanA.y * ox + tanB.y * oz);
+                    float pz = (float)(ripple.worldPos.z + tanA.z * ox + tanB.z * oz);
+                    float vx = (float)(tanA.x * Math.cos(angle) + tanB.x * Math.sin(angle)) * speed;
+                    float vy = (float)(tanA.y * Math.cos(angle) + tanB.y * Math.sin(angle)) * speed;
+                    float vz = (float)(tanA.z * Math.cos(angle) + tanB.z * Math.sin(angle)) * speed;
+                    level.addParticle(ParticleTypes.END_ROD, px, py, pz, vx * 0.05f, vy * 0.05f, vz * 0.05f);
+                }
+            }
+        }
 
         boolean powered = Math.abs(getSpeed()) > 0;
         int scanRange = range;
@@ -446,8 +522,11 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                 Vec3 perpA = ref.cross(facingVec).normalize();
                 Vec3 perpB = facingVec.cross(perpA);
                 double halfPhiRad = Math.toRadians(phi / 2.0);
+                // Spherical cap area ∝ range² × (1 - cos(halfAngle)), reference at r=8, phi=270
+                float capFactor = scanRange * scanRange * (float)(1.0 - Math.cos(halfPhiRad));
+                int particleCount = Math.max(1, Math.round(capFactor / 21.85f));
 
-                for (int i = 0; i < 5; i++) {
+                for (int i = 0; i < particleCount; i++) {
                     double alpha = level.random.nextDouble() * halfPhiRad;
                     double beta = level.random.nextDouble() * 2 * Math.PI;
                     Vec3 dir = facingVec.scale(Math.cos(alpha))
