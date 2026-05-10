@@ -19,9 +19,9 @@
   "block.clockworkblock.shield_block.frequency_second": "Second Frequency",
   "block.clockworkblock.shield_block.adjust": "Adjust Parameters",
   "message.clockworkblock.shield_range": "Shield range: %s blocks",
-  "itemGroup.clockworkblock": "Clockwork Block",
+  "itemGroup.clockworkblock": "Create: Shield",
   "tooltip.clockworkblock.stress_input": "Stress input: speed × 256",
   "tooltip.clockworkblock.stress_output": "Stress output: infinite",
   "tooltip.clockworkblock.shield_stress": "Stress impact: speed² × redstone ÷ 16",
-  "itemGroup.clockworkblock_shield": "Clockwork Block - Shield"
+  "itemGroup.clockworkblock_shield": "Create: Shield"
 }
