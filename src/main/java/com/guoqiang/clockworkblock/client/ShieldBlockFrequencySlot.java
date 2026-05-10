@@ -22,7 +22,6 @@ public class ShieldBlockFrequencySlot extends ValueBoxTransform.Dual {
     public Vec3 getLocalOffset(LevelAccessor level, BlockPos pos, BlockState state) {
         Direction freqFace = ShieldBlock.getFrequencyFace(state);
 
-        // Use negative offset so items render OUTSIDE the full-cube block face
         // (Redstone Link uses positive 3.01 because its thin block is on the other side)
         Vec3 location = freqFace.getAxis().isHorizontal()
             ? VecHelper.voxelSpace(8f, 5.5f, 0.5f)

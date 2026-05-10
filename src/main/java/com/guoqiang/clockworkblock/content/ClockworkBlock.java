@@ -4,7 +4,6 @@ import java.util.List;
 
 import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 import com.guoqiang.clockworkblock.ClockworkBlocks;
-import com.guoqiang.clockworkblock.ClockworkBlockMod;
 import com.guoqiang.clockworkblock.ClockworkDataComponents;
 import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -13,7 +12,6 @@ import com.simibubi.create.foundation.block.IBE;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -84,21 +82,7 @@ public class ClockworkBlock extends DirectionalKineticBlock implements IBE<Clock
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        if (!player.isShiftKeyDown()) {
-            return InteractionResult.PASS;
-        }
-
-        if (!level.isClientSide) {
-            withBlockEntityDo(level, pos, blockEntity -> {
-                int speed = blockEntity.cycleOutputSpeed();
-                player.displayClientMessage(
-                    Component.translatable("message." + ClockworkBlockMod.MOD_ID + ".output_speed", speed),
-                    true
-                );
-            });
-        }
-
-        return InteractionResult.SUCCESS;
+        return InteractionResult.PASS;
     }
 
     @Override

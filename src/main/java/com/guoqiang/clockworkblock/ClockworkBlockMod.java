@@ -1,6 +1,7 @@
 package com.guoqiang.clockworkblock;
 
 import com.guoqiang.clockworkblock.client.ShieldBlockScreen;
+import com.guoqiang.clockworkblock.client.ShieldFanVisual;
 import com.guoqiang.clockworkblock.content.ClockworkBlockEntity;
 import com.simibubi.create.api.stress.BlockStressValues;
 
@@ -9,6 +10,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
 
@@ -37,6 +39,17 @@ public class ClockworkBlockMod {
         @SubscribeEvent
         public static void registerScreens(RegisterMenuScreensEvent event) {
             event.register(ClockworkMenuTypes.SHIELD_BLOCK.get(), ShieldBlockScreen::new);
+        }
+
+        @SubscribeEvent
+        public static void onClientSetup(FMLClientSetupEvent event) {
+            event.enqueueWork(() -> {
+                dev.engine_room.flywheel.lib.visualization.SimpleBlockEntityVisualizer.builder(
+                        ClockworkBlockEntityTypes.SHIELD_BLOCK.get())
+                    .factory(ShieldFanVisual::new)
+                    .neverSkipVanillaRender()
+                    .apply();
+            });
         }
     }
 }

@@ -8,12 +8,9 @@ import com.simibubi.create.foundation.block.IBE;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
-import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -23,14 +20,26 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 public class ShieldBlock extends DirectionalKineticBlock implements IBE<ShieldBlockEntity> {
 
+    public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
+
     public ShieldBlock(Properties properties) {
         super(properties);
+        registerDefaultState(defaultBlockState().setValue(POWERED, false));
         MovementBehaviour.REGISTRY.register(this, new ShieldBlockMovementBehaviour());
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        super.createBlockStateDefinition(builder);
+        builder.add(POWERED);
     }
 
     @Override
@@ -56,24 +65,7 @@ public class ShieldBlock extends DirectionalKineticBlock implements IBE<ShieldBl
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos,
                                                Player player, BlockHitResult hitResult) {
-        /** Blue face (right side): angle/flow/range adjustment via GUI. */
-        if (hitResult.getDirection() != getAngleFace(state))
-            return InteractionResult.PASS;
-
-        if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
-            withBlockEntityDo(level, pos, be ->
-                serverPlayer.openMenu(new SimpleMenuProvider(
-                    (id, inv, p) -> new ShieldBlockMenu(id, inv, pos, be.getPhi(), be.getFlow(), be.getRange()),
-                    Component.translatable("block.clockworkblock.shield_block")
-                ), buf -> {
-                    buf.writeBlockPos(pos);
-                    buf.writeInt(be.getPhi());
-                    buf.writeInt(be.getFlow());
-                    buf.writeInt(be.getRange());
-                })
-            );
-        }
-        return InteractionResult.SUCCESS;
+        return InteractionResult.PASS;
     }
 
     /** Red face (left side): set frequency with item. */
@@ -82,6 +74,15 @@ public class ShieldBlock extends DirectionalKineticBlock implements IBE<ShieldBl
                                                Player player, InteractionHand hand, BlockHitResult hitResult) {
         if (player.isShiftKeyDown())
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+
+        // Dye: right-click any face with dye to set particle color
+        if (stack.getItem() instanceof net.minecraft.world.item.DyeItem dye) {
+            if (!level.isClientSide) {
+                withBlockEntityDo(level, pos, be ->
+                    be.setParticleColor(dye.getDyeColor()));
+            }
+            return ItemInteractionResult.SUCCESS;
+        }
 
         if (hitResult.getDirection() != getFrequencyFace(state))
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
@@ -102,7 +103,7 @@ public class ShieldBlock extends DirectionalKineticBlock implements IBE<ShieldBl
     }
 
     /** Blue face: right side. After X rotation, east stays east. */
-    static Direction getAngleFace(BlockState state) {
+    public static Direction getAngleFace(BlockState state) {
         Direction facing = state.getValue(FACING);
         if (facing.getAxis().isHorizontal())
             return facing.getClockWise();

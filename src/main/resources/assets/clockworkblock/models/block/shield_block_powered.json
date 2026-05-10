@@ -7,16 +7,16 @@
 		"particle": "clockworkblock:block/fan_side_wireless",
 		"fan_side_wireless": "clockworkblock:block/fan_side_wireless",
 		"fan_side_botton": "clockworkblock:block/fan_side_botton",
-		"fan_side_redstone": "clockworkblock:block/fan_side_redstone"
+		"fan_side_redstone_powerd": "clockworkblock:block/fan_side_redstone_powerd"
 	},
 	"elements": [
 		{
 			"from": [0, 0, 0],
 			"to": [16, 16, 16],
 			"faces": {
-				"north": {"uv": [0, 0, 16, 16], "texture": "#fan_side_redstone"},
+				"north": {"uv": [0, 0, 16, 16], "texture": "#fan_side_redstone_powerd"},
 				"east": {"uv": [0, 0, 16, 16], "texture": "#fan_side_botton"},
-				"south": {"uv": [0, 0, 16, 16], "texture": "#fan_side_redstone"},
+				"south": {"uv": [0, 0, 16, 16], "texture": "#fan_side_redstone_powerd"},
 				"west": {"uv": [0, 0, 16, 16], "texture": "#fan_side_wireless"},
 				"up": {"uv": [0, 0, 16, 16], "texture": "#3"},
 				"down": {"uv": [0, 0, 16, 16], "texture": "#3"}
@@ -26,9 +26,9 @@
 			"from": [1.95, 16, 1.95],
 			"to": [14.05, 0, 14.05],
 			"faces": {
-				"north": {"uv": [2, 0, 14, 16], "rotation": 180, "texture": "#fan_side_redstone"},
+				"north": {"uv": [2, 0, 14, 16], "rotation": 180, "texture": "#fan_side_redstone_powerd"},
 				"east": {"uv": [2, 0, 14, 16], "rotation": 180, "texture": "#fan_side_botton"},
-				"south": {"uv": [2, 0, 14, 16], "rotation": 180, "texture": "#fan_side_redstone"},
+				"south": {"uv": [2, 0, 14, 16], "rotation": 180, "texture": "#fan_side_redstone_powerd"},
 				"west": {"uv": [2, 0, 14, 16], "rotation": 180, "texture": "#fan_side_wireless"}
 			}
 		},

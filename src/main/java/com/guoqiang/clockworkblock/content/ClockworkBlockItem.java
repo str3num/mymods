@@ -51,13 +51,10 @@ public class ClockworkBlockItem extends BlockItem {
                 getOutputSpeed(stack)
             )
             .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable(
-                "tooltip." + ClockworkBlockMod.MOD_ID + ".power",
-                getPower(stack)
-            )
+        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".stress_input")
             .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".redstone")
-            .withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".stress_output")
+            .withStyle(ChatFormatting.GRAY));
     }
 
     public static int getStoredEnergy(ItemStack stack) {

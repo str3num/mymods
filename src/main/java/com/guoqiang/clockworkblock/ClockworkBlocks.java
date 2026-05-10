@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 import com.guoqiang.clockworkblock.content.ClockworkBlock;
 import com.guoqiang.clockworkblock.content.ClockworkBlockItem;
 import com.guoqiang.clockworkblock.content.ShieldBlock;
+import com.guoqiang.clockworkblock.content.ShieldBlockItem;
 
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -48,7 +49,7 @@ public class ClockworkBlocks {
 
     public static final DeferredHolder<Item, BlockItem> SHIELD_BLOCK_ITEM = ITEMS.register(
         "shield_block",
-        () -> new BlockItem(SHIELD_BLOCK.get(), new Item.Properties())
+        () -> new ShieldBlockItem(SHIELD_BLOCK.get(), new Item.Properties())
     );
 
     private ClockworkBlocks() {

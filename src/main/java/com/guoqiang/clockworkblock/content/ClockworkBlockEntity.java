@@ -6,37 +6,25 @@ import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform;
-import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour;
 import com.simibubi.create.foundation.utility.CreateLang;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Direction.Axis;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
-import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
-
-import dev.engine_room.flywheel.lib.transform.TransformStack;
-import net.createmod.catnip.math.AngleHelper;
-import net.createmod.catnip.math.VecHelper;
 
 public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     public static final int MAX_POWER = 65536;
     public static final int POWER_PER_RPM = 256;
-    public static final int MAX_POWER_STEP = MAX_POWER / POWER_PER_RPM;
     public static final int MAX_ENERGY = MAX_POWER * 60 * 20;
     public static final int DEFAULT_OUTPUT_SPEED = 64;
     public static final int DEFAULT_POWER = POWER_PER_RPM;
     public static final int[] OUTPUT_SPEED_STEPS = {16, 32, 64, 128};
-    public ScrollValueBehaviour powerValue;
     private int storedEnergy;
     private int outputSpeed = DEFAULT_OUTPUT_SPEED;
     private int configuredPower = DEFAULT_POWER;
@@ -54,22 +42,6 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
-        powerValue = new ScrollValueBehaviour(
-            CreateLang.translateDirect("tooltip.clockworkblock.power_label"),
-            this,
-            new PowerValueBox()
-        );
-        powerValue.between(1, MAX_POWER_STEP);
-        powerValue.value = getPowerStep();
-        powerValue.withFormatter(value -> value + " × 256 = " + (value * 256));
-        powerValue.withCallback(value -> {
-            configuredPower = powerFromStep(value);
-            if (level != null && !level.isClientSide) {
-                lastLoadState = isChargingLoadActive();
-                updateStressValues();
-            }
-        });
-        behaviours.add(powerValue);
     }
 
     @Override
@@ -142,8 +114,7 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     public float calculateStressApplied() {
         float impact = 0;
         if (isChargingLoadActive()) {
-            float speed = Math.abs(getSpeed());
-            impact = speed == 0 ? 0 : getPower() / speed;
+            impact = Math.abs(getSpeed()) * 512;
         }
         lastStressApplied = impact;
         return impact;
@@ -229,7 +200,7 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     }
 
     public int getPower() {
-        return powerValue == null ? configuredPower : powerFromStep(powerValue.getValue());
+        return configuredPower;
     }
 
     public void setOutputSpeed(int outputSpeed) {
@@ -245,23 +216,7 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
     }
 
     public void setPower(int power) {
-        int sanitized = powerFromStep(stepFromPower(power));
-        configuredPower = sanitized;
-        if (powerValue == null) {
-            return;
-        }
-        powerValue.setValue(stepFromPower(sanitized));
-    }
-
-    public int cycleOutputSpeed() {
-        for (int i = 0; i < OUTPUT_SPEED_STEPS.length; i++) {
-            if (OUTPUT_SPEED_STEPS[i] == outputSpeed) {
-                setOutputSpeed(OUTPUT_SPEED_STEPS[(i + 1) % OUTPUT_SPEED_STEPS.length]);
-                return outputSpeed;
-            }
-        }
-        setOutputSpeed(DEFAULT_OUTPUT_SPEED);
-        return outputSpeed;
+        configuredPower = Mth.clamp(power, POWER_PER_RPM, MAX_POWER);
     }
 
     public int getComparatorOutput() {
@@ -313,18 +268,6 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
         sendData();
     }
 
-    private int getPowerStep() {
-        return stepFromPower(configuredPower);
-    }
-
-    private static int stepFromPower(int power) {
-        return Mth.clamp(Mth.ceil(power / (float) POWER_PER_RPM), 1, MAX_POWER_STEP);
-    }
-
-    private static int powerFromStep(int step) {
-        return Mth.clamp(step, 1, MAX_POWER_STEP) * POWER_PER_RPM;
-    }
-
     private void syncPoweredState(boolean powered) {
         BlockState state = getBlockState();
         if (state.getValue(ClockworkBlock.POWERED) == powered) {
@@ -340,38 +283,5 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
             }
         }
         return DEFAULT_OUTPUT_SPEED;
-    }
-
-    private static class PowerValueBox extends ValueBoxTransform.Sided {
-        @Override
-        protected Vec3 getSouthLocation() {
-            return VecHelper.voxelSpace(8, 8, 12.5);
-        }
-
-        @Override
-        public Vec3 getLocalOffset(LevelAccessor level, BlockPos pos, BlockState state) {
-            Direction facing = state.getValue(ClockworkBlock.FACING);
-            return super.getLocalOffset(level, pos, state)
-                .add(Vec3.atLowerCornerOf(facing.getNormal()).scale(-1 / 16f));
-        }
-
-        @Override
-        public void rotate(LevelAccessor level, BlockPos pos, BlockState state, PoseStack ms) {
-            super.rotate(level, pos, state, ms);
-            Direction facing = state.getValue(ClockworkBlock.FACING);
-            if (facing.getAxis() == Axis.Y) {
-                return;
-            }
-            if (getSide() != Direction.UP) {
-                return;
-            }
-            TransformStack.of(ms)
-                .rotateZDegrees(-AngleHelper.horizontalAngle(facing) + 180);
-        }
-
-        @Override
-        protected boolean isSideActive(BlockState state, Direction direction) {
-            return direction == Direction.UP;
-        }
     }
 }

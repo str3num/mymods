@@ -1,26 +1,31 @@
 package com.guoqiang.clockworkblock;
 
-import net.minecraft.world.item.CreativeModeTabs;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.CreativeModeTab;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredRegister;
 
 public class ClockworkCreativeModeTabs {
+    public static final DeferredRegister<CreativeModeTab> CREATIVE_TABS =
+        DeferredRegister.create(Registries.CREATIVE_MODE_TAB, ClockworkBlockMod.MOD_ID);
+
+    public static final DeferredHolder<CreativeModeTab, CreativeModeTab> CLOCKWORK_TAB =
+        CREATIVE_TABS.register("clockworkblock", () -> CreativeModeTab.builder()
+            .title(Component.translatable("itemGroup.clockworkblock"))
+            .icon(() -> ClockworkBlocks.CLOCKWORK_BLOCK_ITEM.get().getDefaultInstance())
+            .displayItems((params, output) -> {
+                // Leave the first 10 slots for vanilla items if added later
+                output.accept(ClockworkBlocks.CLOCKWORK_BLOCK_ITEM.get());
+                output.accept(ClockworkBlocks.SHIELD_BLOCK_ITEM.get());
+            })
+            .build());
+
     private ClockworkCreativeModeTabs() {
     }
 
     public static void register(IEventBus eventBus) {
-    }
-
-    @EventBusSubscriber(modid = ClockworkBlockMod.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
-    public static class Handler {
-        @SubscribeEvent
-        public static void onBuildTab(BuildCreativeModeTabContentsEvent event) {
-            if (event.getTabKey() == CreativeModeTabs.REDSTONE_BLOCKS) {
-                event.accept(ClockworkBlocks.CLOCKWORK_BLOCK_ITEM.get());
-                event.accept(ClockworkBlocks.SHIELD_BLOCK_ITEM.get());
-            }
-        }
+        CREATIVE_TABS.register(eventBus);
     }
 }

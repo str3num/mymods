@@ -5,6 +5,8 @@ import java.util.*;
 import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 import com.guoqiang.clockworkblock.client.ShieldBlockFrequencySlot;
 import com.simibubi.create.content.kinetics.fan.AirCurrent;
+import com.simibubi.create.content.kinetics.fan.IAirCurrentSource;
+import com.simibubi.create.content.kinetics.fan.NozzleBlockEntity;
 import com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler.Frequency;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -23,8 +25,10 @@ import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.network.chat.Component;
@@ -42,7 +46,7 @@ import net.minecraft.world.phys.Vec3;
 import org.apache.commons.lang3.tuple.Pair;
 import org.joml.Vector3d;
 
-public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntitySubLevelActor {
+public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntitySubLevelActor, IAirCurrentSource {
 
     /** Network key: groups shields by (firstFrequency, secondFrequency) pair */
     private record FrequencyKey(Frequency first, Frequency second) {}
@@ -69,7 +73,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         }
     }
 
-    private int phi = 90;
+    private int phi = 45;
     private int minRange = 0;
     private int flow = 8;
     private int range = 8;
@@ -78,6 +82,12 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     private boolean onSubLevel;
     private dev.ryanhcode.sable.sublevel.SubLevel cachedSubLevel;
     private float lastStressSpeed;
+    private int lastRedstoneSignal = -1;
+    private boolean clientActive;
+    private boolean lastPoweredState = false;
+    private Vec3 lastSubLevelImpactPos = Vec3.ZERO;
+    private boolean hasSubLevelImpact = false;
+    private DyeColor particleColor = null;
 
     private record PendingSubLevelTarget(ServerSubLevel target, Vec3 shieldWorldCenter) {}
     private final List<PendingSubLevelTarget> pendingSubLevelTargets = new ArrayList<>();
@@ -112,14 +122,6 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     }
 
     @Override
-    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
-        Pair<ValueBoxTransform, ValueBoxTransform> slots =
-            ValueBoxTransform.Dual.makeSlots(ShieldBlockFrequencySlot::new);
-        link = new ShieldLinkBehaviour(this, slots);
-        behaviours.add(link);
-    }
-
-    @Override
     public void tick() {
         super.tick();
 
@@ -131,11 +133,13 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             swapAllyCache(level);
         }
 
-        // Register stress with the network when speed changes
+        // Register stress with the network when speed or redstone signal changes
         if (!level.isClientSide && hasNetwork()) {
             float speed = Math.abs(getSpeed());
-            if (speed > 0 && speed != lastStressSpeed) {
+            int rs = level.getBestNeighborSignal(worldPosition);
+            if (speed > 0 && (speed != lastStressSpeed || rs != lastRedstoneSignal)) {
                 lastStressSpeed = speed;
+                lastRedstoneSignal = rs;
                 getOrCreateNetwork().updateStressFor(this, calculateStressApplied());
             }
         }
@@ -146,19 +150,33 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         }
 
         if (onSubLevel && cachedSubLevel != null) {
-            Vec3 localCenter = VecHelper.getCenterOf(worldPosition);
+            Vec3 localCenter = getPushCenterLocal();
             Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(level, localCenter);
             tickClientOnly(worldCenter, getSubLevelWorldFacing(cachedSubLevel));
             return;
         }
 
         Direction facing = getBlockState().getValue(ShieldBlock.FACING);
-        Vec3 center = VecHelper.getCenterOf(worldPosition);
+        Vec3 center = getPushCenterLocal();
 
         if (level.isClientSide) {
             tickClientOnly(center, Vec3.atLowerCornerOf(facing.getNormal()));
-        } else if (Math.abs(getSpeed()) > 0) {
-            tickServer(level, center, facing);
+        } else {
+            boolean hasSignal = hasRedstoneSignal();
+            boolean shouldBeActive = Math.abs(getSpeed()) > 0 && hasSignal;
+            if (shouldBeActive != clientActive) {
+                clientActive = shouldBeActive;
+                sendData();
+            }
+            if (hasSignal != lastPoweredState) {
+                lastPoweredState = hasSignal;
+                BlockState state = getBlockState();
+                if (state.hasProperty(ShieldBlock.POWERED))
+                    level.setBlock(worldPosition, state.setValue(ShieldBlock.POWERED, hasSignal), 2);
+            }
+            if (shouldBeActive) {
+                tickServer(level, center, facing);
+            }
         }
     }
 
@@ -183,7 +201,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             return;
 
         Vec3 facingVec = getSubLevelWorldFacing(subLevel);
-        Vec3 localCenter = VecHelper.getCenterOf(worldPosition);
+        Vec3 localCenter = getPushCenterLocal();
         Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(level, localCenter);
 
         SharedScanState shared = getSharedState(parentLevel);
@@ -210,11 +228,11 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
 
         // Ground recoil: raycast in facing direction, offset start outside own block
         Vec3 facingVec = getSubLevelWorldFacing(subLevel);
-        Vec3 localCenter = net.createmod.catnip.math.VecHelper.getCenterOf(worldPosition);
-        net.minecraft.world.phys.Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(
-            subLevel.getLevel(), (net.minecraft.world.phys.Vec3) localCenter);
+        Vec3 localCenter = getPushCenterLocal();
+        Vec3 worldCenter = Sable.HELPER.projectOutOfSubLevel(
+            subLevel.getLevel(), localCenter);
         Vec3 rayStart = worldCenter.add(facingVec.scale(0.6));
-        Vec3 rayEnd = rayStart.add(facingVec.scale(range));
+        Vec3 rayEnd = rayStart.add(facingVec.scale(getEffectiveRange()));
         net.minecraft.world.level.ClipContext clipCtx = new net.minecraft.world.level.ClipContext(
             rayStart, rayEnd, net.minecraft.world.level.ClipContext.Block.COLLIDER,
             net.minecraft.world.level.ClipContext.Fluid.NONE,
@@ -222,8 +240,8 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         BlockHitResult hit = subLevel.getLevel().clip(clipCtx);
         if (hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
             double dist = rayStart.distanceTo(hit.getLocation());
-            if (dist > 0.01 && dist <= range) {
-                double strength = flow * (Math.cos(dist / range + Math.PI / 2) + 1.0);
+            if (dist > 0.01 && dist <= getEffectiveRange()) {
+                double strength = getEffectiveFlow() * (Math.cos(dist / getEffectiveRange() + Math.PI / 2) + 1.0);
                 double baseForce = strength * 200;
                 double mass = Math.max(subLevel.getMassTracker().getMass(), 0.001);
 
@@ -248,8 +266,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                     -facingVec.y * baseForce * timeStep,
                     -facingVec.z * baseForce * timeStep);
                 Vector3d localRecoil = subLevel.logicalPose().transformNormalInverse(recoil);
-                Vector3d shieldLocalPos = JOMLConversion.toJOML(
-                    VecHelper.getCenterOf(worldPosition));
+                Vector3d shieldLocalPos = JOMLConversion.toJOML(getPushCenterLocal());
                 subLevel.getOrCreateQueuedForceGroup(ForceGroups.MAGNETIC_FORCE.get())
                     .applyAndRecordPointForce(shieldLocalPos, localRecoil);
             }
@@ -266,11 +283,12 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
 
         Vec3 diff = targetCenter.subtract(shieldWorldCenter);
         double distance = diff.length();
-        if (distance > range || distance < 0.01)
+        int effRange = getEffectiveRange();
+        if (distance > effRange || distance < 0.01)
             return;
 
         Vec3 dir = diff.normalize();
-        double strength = flow * (Math.cos(distance / range + Math.PI / 2) + 1.0);
+        double strength = getEffectiveFlow() * (Math.cos(distance / effRange + Math.PI / 2) + 1.0);
         if (strength <= 0)
             return;
 
@@ -311,7 +329,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             Vector3d worldSelfForce = new Vector3d(worldForce).negate();
             Vector3d localSelfForce = selfSubLevel.logicalPose().transformNormalInverse(worldSelfForce);
             localSelfForce.mul(timeStep);
-            Vector3d shieldLocalPos = JOMLConversion.toJOML(VecHelper.getCenterOf(worldPosition));
+            Vector3d shieldLocalPos = JOMLConversion.toJOML(getPushCenterLocal());
             selfSubLevel.getOrCreateQueuedForceGroup(ForceGroups.MAGNETIC_FORCE.get())
                 .applyAndRecordPointForce(shieldLocalPos, localSelfForce);
         }
@@ -358,9 +376,9 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     private void scanAndPush(ServerSubLevel ownSubLevel, Level parentLevel, Vec3 center,
                               Vec3 facingVec, SharedScanState shared) {
         pendingSubLevelTargets.clear();
-        double halfPhiRad = Math.toRadians(phi / 2.0);
+        double halfPhiRad = Math.toRadians(getEffectivePhi() / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
-        int scanRange = range;
+        int scanRange = getEffectiveRange();
 
         // 1. Scan regular entities in own cone → add to shared
         AABB bb = new AABB(center, center).inflate(scanRange);
@@ -369,7 +387,6 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                 Vec3 d = e.position().subtract(center);
                 double dist = d.length();
                 if (dist > scanRange || dist < minRange
-                    || e.isShiftKeyDown()
                     || AirCurrent.isPlayerCreativeFlying(e))
                     return false;
                 return d.normalize().dot(facingVec) >= cosHalfPhi;
@@ -419,18 +436,46 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
             if (distance > scanRange || distance < minRange
-                || entity.isShiftKeyDown()
                 || AirCurrent.isPlayerCreativeFlying(entity))
                 continue;
             applyPushForce(entity, diff, (float) distance);
         }
 
-        // 4. Record sub-level targets for physics tick
+        // 4. Record sub-level targets for physics tick, and track nearest impact for client particles
+        Vec3 nearestSubImpact = null;
+        double nearestSubDist = Double.MAX_VALUE;
         for (ServerSubLevel other : shared.subLevels) {
             if (other == ownSubLevel || other.isRemoved())
                 continue;
+
+            org.joml.Vector3d jomlPos2 = new org.joml.Vector3d();
+            other.logicalPose().transformPosition(
+                JOMLConversion.toJOML(other.getPlot().getCenterBlock().getCenter()),
+                jomlPos2);
+            Vec3 otherCenter = new Vec3(jomlPos2.x, jomlPos2.y, jomlPos2.z);
+            Vec3 diff = otherCenter.subtract(center);
+            double dist = diff.length();
+            if (dist < nearestSubDist) {
+                nearestSubDist = dist;
+                nearestSubImpact = center.add(diff.normalize().scale(scanRange));
+            }
+
             pendingSubLevelTargets.add(new PendingSubLevelTarget(other, center));
         }
+
+        boolean changed = false;
+        if (nearestSubImpact != null) {
+            if (!hasSubLevelImpact || !lastSubLevelImpactPos.equals(nearestSubImpact)) {
+                lastSubLevelImpactPos = nearestSubImpact;
+                hasSubLevelImpact = true;
+                changed = true;
+            }
+        } else if (hasSubLevelImpact) {
+            hasSubLevelImpact = false;
+            changed = true;
+        }
+        if (changed)
+            sendData();
 
         // 5. Maintain pushingEntities for client-side tracking (own cone only)
         for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
@@ -446,14 +491,21 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     private final java.util.Map<java.util.UUID, Float> prevEntityDist = new java.util.HashMap<>();
 
     private void tickClientOnly(Vec3 center, Vec3 facingVec) {
-        if (flow <= 0)
+        boolean powered = Math.abs(getSpeed()) > 0 && clientActive;
+        if (!powered)
             return;
 
         // Entity boundary crossing detection for ripple effects
         float currentTime = level.getGameTime();
-        int rRange = range;
+        int rRange = getEffectiveRange();
+
+        // Sub-level impact ripple effects (synced from server)
+        if (hasSubLevelImpact) {
+            ripples.add(new RippleEffect(lastSubLevelImpactPos, currentTime, rRange * 3.0f / 32f, 0xFFAA55));
+            hasSubLevelImpact = false;
+        }
         if (rRange > 0) {
-            double halfPhiRad = Math.toRadians(phi / 2.0);
+            double halfPhiRad = Math.toRadians(getEffectivePhi() / 2.0);
             double cosHalfPhi = Math.cos(halfPhiRad);
             float scanR = Math.max(rRange * 3, 8);
             java.util.Set<java.util.UUID> seenIds = new java.util.HashSet<>();
@@ -474,7 +526,6 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                     boolean wasInside = prev < 1.0f;
                     boolean isInside = dist < rRange;
                     if (wasInside != isInside) {
-                        // Record ripple for continuous particle spawning each tick
                         Vec3 impact = center.add(dir.scale(rRange));
                         ripples.add(new RippleEffect(impact, currentTime, rRange * 3.0f / 32f, 0xAADDFF));
                     }
@@ -490,7 +541,6 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             RippleEffect ripple = rit.next();
             float age = currentTime - ripple.startTime;
             if (age > 3.0f) { rit.remove(); continue; }
-            // Every 10 ticks, spawn a new ring at 0.3-0.4 that expands outward fast
             if ((int)age % 10 == 0) {
                 Vec3 radialDir = ripple.worldPos.subtract(center).normalize();
                 Vec3 refUp = Math.abs(radialDir.y) < 0.9f ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
@@ -507,59 +557,49 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                     float vx = (float)(tanA.x * Math.cos(angle) + tanB.x * Math.sin(angle)) * speed;
                     float vy = (float)(tanA.y * Math.cos(angle) + tanB.y * Math.sin(angle)) * speed;
                     float vz = (float)(tanA.z * Math.cos(angle) + tanB.z * Math.sin(angle)) * speed;
-                    level.addParticle(ParticleTypes.END_ROD, px, py, pz, vx * 0.05f, vy * 0.05f, vz * 0.05f);
+                    addColoredParticle(px, py, pz, vx * 0.05f, vy * 0.05f, vz * 0.05f, true);
                 }
             }
         }
 
-        boolean powered = Math.abs(getSpeed()) > 0;
-        int scanRange = range;
+        int scanRange = getEffectiveRange();
 
-        if (powered) {
-            // Shield boundary particles: scatter points on the spherical cap at distance=range
-            if (scanRange > 0) {
-                Vec3 ref = facingVec.y() < 0.9 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
-                Vec3 perpA = ref.cross(facingVec).normalize();
-                Vec3 perpB = facingVec.cross(perpA);
-                double halfPhiRad = Math.toRadians(phi / 2.0);
-                // Spherical cap area ∝ range² × (1 - cos(halfAngle)), reference at r=8, phi=270
-                float capFactor = scanRange * scanRange * (float)(1.0 - Math.cos(halfPhiRad));
-                int particleCount = Math.max(1, Math.round(capFactor / 21.85f));
+        // Shield boundary particles: scatter points on the spherical cap at distance=range
+        if (scanRange > 0) {
+            Vec3 ref = facingVec.y() < 0.9 ? new Vec3(0, 1, 0) : new Vec3(1, 0, 0);
+            Vec3 perpA = ref.cross(facingVec).normalize();
+            Vec3 perpB = facingVec.cross(perpA);
+            double halfPhiRad = Math.toRadians(getEffectivePhi() / 2.0);
+            float capFactor = scanRange * scanRange * (float)(1.0 - Math.cos(halfPhiRad));
+            int particleCount = Math.max(1, Math.round(capFactor / 21.85f));
 
-                for (int i = 0; i < particleCount; i++) {
-                    double alpha = level.random.nextDouble() * halfPhiRad;
-                    double beta = level.random.nextDouble() * 2 * Math.PI;
-                    Vec3 dir = facingVec.scale(Math.cos(alpha))
-                        .add(perpA.scale(Math.sin(alpha) * Math.cos(beta)))
-                        .add(perpB.scale(Math.sin(alpha) * Math.sin(beta)));
-                    Vec3 pos = center.add(dir.scale(scanRange));
-                    level.addParticle(ParticleTypes.END_ROD, pos.x, pos.y, pos.z, 0, 0, 0);
-                }
+            for (int i = 0; i < particleCount; i++) {
+                double alpha = level.random.nextDouble() * halfPhiRad;
+                double beta = level.random.nextDouble() * 2 * Math.PI;
+                Vec3 dir = facingVec.scale(Math.cos(alpha))
+                    .add(perpA.scale(Math.sin(alpha) * Math.cos(beta)))
+                    .add(perpB.scale(Math.sin(alpha) * Math.sin(beta)));
+                Vec3 pos = center.add(dir.scale(scanRange));
+                Vec3 rayStart = center.add(dir.scale(0.6));
+                if (canSeePos(level, rayStart, pos))
+                    addColoredParticle(pos.x, pos.y, pos.z, 0, 0, 0, true);
             }
+        }
 
-            if (level.random.nextInt(10) == 0) {
-                Vec3 start = VecHelper.offsetRandomly(center, level.random, scanRange * 0.4f);
-                start = start.add(facingVec.scale(level.random.nextFloat() * scanRange * 0.6f));
-                Vec3 motion = center.subtract(start).normalize().scale(0.3f);
-                level.addParticle(ParticleTypes.POOF, start.x, start.y, start.z, motion.x, motion.y, motion.z);
+        for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
+            Entity entity = it.next();
+            if (!entity.isAlive()) {
+                it.remove();
+                continue;
             }
-
-            for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
-                Entity entity = it.next();
-                if (!entity.isAlive()) {
-                    it.remove();
-                    continue;
-                }
-                Vec3 diff = entity.position().subtract(center);
-                double distance = diff.length();
-                if (distance > scanRange || distance < minRange
-                    || entity.isShiftKeyDown()
-                    || AirCurrent.isPlayerCreativeFlying(entity)) {
-                    it.remove();
-                    continue;
-                }
-                applyPushForce(entity, diff, (float) distance);
+            Vec3 diff = entity.position().subtract(center);
+            double distance = diff.length();
+            if (distance > scanRange || distance < minRange
+                || AirCurrent.isPlayerCreativeFlying(entity)) {
+                it.remove();
+                continue;
             }
+            applyPushForce(entity, diff, (float) distance);
         }
     }
 
@@ -574,20 +614,21 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                 continue;
             Vec3 diff = entity.position().subtract(center);
             double distance = diff.length();
-            if (distance > range || distance < minRange
-                || entity.isShiftKeyDown()
+            if (distance > getEffectiveRange() || distance < minRange
                 || AirCurrent.isPlayerCreativeFlying(entity))
                 continue;
             applyPushForce(entity, diff, (float) distance);
         }
 
         // Push sub-levels from the main world (using RigidBodyHandle directly)
+        Vec3 nearestSubImpact = null;
+        double nearestSubDist = Double.MAX_VALUE;
         if (scanLevel instanceof ServerLevel serverLevel && !onSubLevel) {
             ServerSubLevelContainer container =
                 (ServerSubLevelContainer) SubLevelContainer.getContainer(serverLevel);
             if (container != null) {
                 Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
-                double halfPhiRad = Math.toRadians(phi / 2.0);
+                double halfPhiRad = Math.toRadians(getEffectivePhi() / 2.0);
                 double cosHalfPhi = Math.cos(halfPhiRad);
 
                 for (ServerSubLevel other : container.getAllSubLevels()) {
@@ -610,14 +651,20 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
 
                     Vec3 diff = otherCenter.subtract(center);
                     double dist = diff.length();
-                    if (dist > range || dist < minRange || dist < 0.01)
+                    if (dist > getEffectiveRange() || dist < minRange || dist < 0.01)
                         continue;
 
                     Vec3 dir = diff.normalize();
                     if (dir.dot(facingVec) < cosHalfPhi)
                         continue;
 
-                    double strength = flow * (Math.cos(dist / range + Math.PI / 2) + 1.0);
+                    // Track nearest sub-level impact for client particles
+                    if (dist < nearestSubDist) {
+                        nearestSubDist = dist;
+                        nearestSubImpact = center.add(dir.scale(getEffectiveRange()));
+                    }
+
+                    double strength = getEffectiveFlow() * (Math.cos(dist / getEffectiveRange() + Math.PI / 2) + 1.0);
                     if (strength <= 0)
                         continue;
 
@@ -656,6 +703,20 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             }
         }
 
+        boolean changed = false;
+        if (nearestSubImpact != null) {
+            if (!hasSubLevelImpact || !lastSubLevelImpactPos.equals(nearestSubImpact)) {
+                lastSubLevelImpactPos = nearestSubImpact;
+                hasSubLevelImpact = true;
+                changed = true;
+            }
+        } else if (hasSubLevelImpact) {
+            hasSubLevelImpact = false;
+            changed = true;
+        }
+        if (changed)
+            sendData();
+
         for (Iterator<Entity> it = pushingEntities.iterator(); it.hasNext(); ) {
             if (!it.next().isAlive())
                 it.remove();
@@ -664,10 +725,10 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
 
     private void scanForEntities(Level scanLevel, Vec3 center, Direction facing, SharedScanState shared) {
         Vec3 facingVec = Vec3.atLowerCornerOf(facing.getNormal());
-        double halfPhiRad = Math.toRadians(phi / 2.0);
+        double halfPhiRad = Math.toRadians(getEffectivePhi() / 2.0);
         double cosHalfPhi = Math.cos(halfPhiRad);
         boolean checkLineOfSight = !onSubLevel;
-        int scanRange = range;
+        int scanRange = getEffectiveRange();
 
         AABB bb = new AABB(center, center).inflate(scanRange);
         for (Entity entity : scanLevel.getEntitiesOfClass(Entity.class, bb,
@@ -675,7 +736,6 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
                     Vec3 d = e.position().subtract(center);
                     double dist = d.length();
                     if (dist > scanRange || dist < minRange
-                        || e.isShiftKeyDown()
                         || AirCurrent.isPlayerCreativeFlying(e))
                         return false;
                     return d.normalize().dot(facingVec) >= cosHalfPhi;
@@ -710,21 +770,64 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     private void applyPushForce(Entity entity, Vec3 diff, float distance) {
         float factor;
         float strength;
-        if (entity instanceof net.minecraft.world.entity.LivingEntity) {
+        if (entity instanceof net.minecraft.world.entity.LivingEntity living) {
             factor = 1f / 4f;
-            strength = flow / (2f * Math.max(distance, 0.01f));
+            strength = getEffectiveFlow() / (2f * Math.max(distance, 0.01f));
+            if (living.isShiftKeyDown())
+                factor *= 0.25f;
+            if (living.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).getItem()
+                    instanceof com.simibubi.create.content.equipment.armor.DivingBootsItem)
+                factor *= 0.25f;
         } else if (entity instanceof ItemEntity) {
             factor = 1f / 2f;
-            strength = flow * (float)(Math.cos(distance / range + Math.PI / 2) + 1.0);
+            strength = getEffectiveFlow() * (float)(Math.cos(distance / getEffectiveRange() + Math.PI / 2) + 1.0);
         } else {
             factor = 1f / 2f;
-            strength = flow * (float)(Math.cos(distance / range + Math.PI / 2) + 1.0);
+            strength = getEffectiveFlow() * (float)(Math.cos(distance / getEffectiveRange() + Math.PI / 2) + 1.0);
         }
         Vec3 pushVec = diff.normalize().scale(strength);
         entity.setDeltaMovement(entity.getDeltaMovement().add(pushVec.scale(factor)));
         entity.fallDistance = 0;
         entity.hurtMarked = true;
     }
+
+    /** Returns the center of the nozzle if one is placed on the front face, otherwise shield center. */
+    private Vec3 getPushCenterLocal() {
+        BlockState state = getBlockState();
+        if (!state.hasProperty(ShieldBlock.FACING))
+            return VecHelper.getCenterOf(worldPosition);
+        BlockPos frontPos = worldPosition.relative(state.getValue(ShieldBlock.FACING));
+        if (level != null && level.getBlockEntity(frontPos) instanceof NozzleBlockEntity) {
+            return VecHelper.getCenterOf(frontPos);
+        }
+        return VecHelper.getCenterOf(worldPosition);
+    }
+
+    // ---- IAirCurrentSource ----
+
+    @Override
+    public AirCurrent getAirCurrent() { return null; }
+
+    @Override
+    public Level getAirCurrentWorld() { return level; }
+
+    @Override
+    public BlockPos getAirCurrentPos() { return worldPosition; }
+
+    @Override
+    public Direction getAirflowOriginSide() {
+        return getBlockState().getValue(ShieldBlock.FACING);
+    }
+
+    @Override
+    public Direction getAirFlowDirection() {
+        float speed = getSpeed();
+        if (speed == 0) return null;
+        return getBlockState().getValue(ShieldBlock.FACING);
+    }
+
+    @Override
+    public boolean isSourceRemoved() { return isRemoved(); }
 
     private boolean canSee(Level scanLevel, Entity entity, Vec3 center) {
         ClipContext context = new ClipContext(
@@ -736,6 +839,17 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         );
         BlockPos hit = scanLevel.clip(context).getBlockPos();
         return hit.equals(BlockPos.containing(center));
+    }
+
+    private boolean canSeePos(Level level, Vec3 from, Vec3 to) {
+        ClipContext ctx = new ClipContext(
+            from, to,
+            ClipContext.Block.COLLIDER,
+            ClipContext.Fluid.NONE,
+            net.minecraft.world.phys.shapes.CollisionContext.empty()
+        );
+        BlockPos hit = level.clip(ctx).getBlockPos();
+        return hit.equals(BlockPos.containing(to));
     }
 
     // ---- Frequency management ----
@@ -768,7 +882,7 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     @Override
     public float calculateStressApplied() {
         float speed = Math.abs(getSpeed());
-        float load = speed == 0 ? 0 : (float) (Math.pow(range, 3) * flow * 16) / speed;
+        float load = speed == 0 ? 0 : (float) (Math.pow(speed, 2) * getEffectiveFlow() / 32);
         this.lastStressApplied = load;
         return load;
     }
@@ -799,9 +913,26 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     }
 
     public void setPhi(int phi) {
+        if (!hasNozzle())
+            return;
         this.phi = Mth.clamp(phi, 45, 270);
         setChanged();
         sendData();
+    }
+
+    /** Phi is fixed at 45° without a nozzle; adjustable 45-270° with nozzle. */
+    public int getEffectivePhi() {
+        return hasNozzle() ? phi : 45;
+    }
+
+    private boolean hasNozzle() {
+        if (level == null)
+            return false;
+        BlockState state = getBlockState();
+        if (!state.hasProperty(ShieldBlock.FACING))
+            return false;
+        return level.getBlockEntity(worldPosition.relative(state.getValue(ShieldBlock.FACING)))
+                instanceof NozzleBlockEntity;
     }
 
     public void setFlow(int flow) {
@@ -820,6 +951,12 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             getOrCreateNetwork().updateStressFor(this, calculateStressApplied());
     }
 
+    public void setParticleColor(DyeColor color) {
+        this.particleColor = color;
+        setChanged();
+        sendData();
+    }
+
     public int getPhi() {
         return phi;
     }
@@ -829,11 +966,84 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
     }
 
     public int getFlow() {
-        return flow;
+        return getEffectiveFlow();
+    }
+
+    /** Effective flow: larger of wireless redstone and wired redstone signal × 2. */
+    public int getEffectiveFlow() {
+        int wireless = 0;
+        int wired = 0;
+        if (level != null) {
+            try {
+                com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler handler =
+                    com.simibubi.create.Create.REDSTONE_LINK_NETWORK_HANDLER;
+                if (handler != null) {
+                    var freqMap = handler.networksIn(level);
+                    if (freqMap != null) {
+                        net.createmod.catnip.data.Couple<com.simibubi.create.content.redstone.link.RedstoneLinkNetworkHandler.Frequency> freqKey =
+                            net.createmod.catnip.data.Couple.create(getFirstFrequency(), getSecondFrequency());
+                        var entry = freqMap.get(freqKey);
+                        if (entry != null) {
+                            for (com.simibubi.create.content.redstone.link.IRedstoneLinkable linkable : entry) {
+                                wireless = Math.max(wireless, linkable.getTransmittedStrength());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+            wired = level.getBestNeighborSignal(worldPosition);
+        }
+        return Math.max(wireless, wired) * 2;
+    }
+
+    /** Whether this shield has a redstone signal (wired or wireless). */
+    private boolean hasRedstoneSignal() {
+        return getEffectiveFlow() > 0;
     }
 
     public int getRange() {
-        return range;
+        return getEffectiveRange();
+    }
+
+    @Override
+    public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+        Pair<ValueBoxTransform, ValueBoxTransform> slots =
+            ValueBoxTransform.Dual.makeSlots(ShieldBlockFrequencySlot::new);
+        link = new ShieldLinkBehaviour(this, slots);
+        behaviours.add(link);
+
+        // Phi (cone angle) scroll value box on the blue face (like ClockworkBlock)
+        var phiValue = new com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollValueBehaviour(
+            com.simibubi.create.foundation.utility.CreateLang.translateDirect("message.clockworkblock.shield_phi"),
+            this, new ShieldAngleBox());
+        phiValue.between(45, 270);
+        phiValue.value = phi;
+        phiValue.withFormatter(v -> v + "°");
+        phiValue.withCallback(v -> {
+            if (!hasNozzle())
+                return;
+            phi = v;
+            setChanged();
+            sendData();
+        });
+        behaviours.add(phiValue);
+    }
+
+    private static class ShieldAngleBox extends com.simibubi.create.foundation.blockEntity.behaviour.ValueBoxTransform.Sided {
+        @Override
+        protected Vec3 getSouthLocation() {
+            return net.createmod.catnip.math.VecHelper.voxelSpace(8, 8, 12.5);
+        }
+
+        @Override
+        protected boolean isSideActive(BlockState state, Direction direction) {
+            return direction == ShieldBlock.getAngleFace(state);
+        }
+    }
+
+    /** Effective range: input speed / 8, clamped to [1, 32]. */
+    public int getEffectiveRange() {
+        return Mth.clamp((int)(Math.abs(getSpeed()) / 8), 1, 32);
     }
 
     @Override
@@ -843,6 +1053,15 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         compound.putInt("MinRange", minRange);
         compound.putInt("Flow", flow);
         compound.putInt("Range", range);
+        compound.putBoolean("Active", clientActive);
+        compound.putBoolean("HasSubImpact", hasSubLevelImpact);
+        if (hasSubLevelImpact) {
+            compound.putDouble("SubImpactX", lastSubLevelImpactPos.x);
+            compound.putDouble("SubImpactY", lastSubLevelImpactPos.y);
+            compound.putDouble("SubImpactZ", lastSubLevelImpactPos.z);
+        }
+        if (particleColor != null)
+            compound.putInt("ParticleColor", particleColor.getId());
     }
 
     @Override
@@ -858,5 +1077,33 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
             range = Mth.clamp(compound.getInt("Range"), 1, 32);
         else
             range = 8;
+        clientActive = compound.getBoolean("Active");
+        hasSubLevelImpact = compound.getBoolean("HasSubImpact");
+        if (hasSubLevelImpact) {
+            double ix = compound.getDouble("SubImpactX");
+            double iy = compound.getDouble("SubImpactY");
+            double iz = compound.getDouble("SubImpactZ");
+            lastSubLevelImpactPos = new Vec3(ix, iy, iz);
+        }
+        if (compound.contains("ParticleColor"))
+            particleColor = DyeColor.byId(compound.getInt("ParticleColor"));
+        else
+            particleColor = null;
+    }
+
+    private void addColoredParticle(double x, double y, double z,
+                                     double vx, double vy, double vz, boolean glow) {
+        if (particleColor != null) {
+            int argb = particleColor.getTextColor();
+            float r = ((argb >> 16) & 0xFF) / 255.0f;
+            float g = ((argb >> 8) & 0xFF) / 255.0f;
+            float b = (argb & 0xFF) / 255.0f;
+            level.addParticle(new DustParticleOptions(new org.joml.Vector3f(r, g, b),
+                glow ? 1.5f : 1.0f), x, y, z, vx, vy, vz);
+        } else if (glow) {
+            level.addParticle(ParticleTypes.END_ROD, x, y, z, vx, vy, vz);
+        } else {
+            level.addParticle(ParticleTypes.POOF, x, y, z, vx, vy, vz);
+        }
     }
 }

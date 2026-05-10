@@ -41,16 +41,13 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         int y = getGuiTop();
 
         phiSlider = new ShieldSlider(x + 10, y + 25, 156, 20,
-            Component.translatable("message.clockworkblock.shield_phi", "").getString(),
-            0, 45, 270, phi);
+            "斥力角度：", 0, 45, 270, phi);
 
         flowSlider = new ShieldSlider(x + 10, y + 55, 156, 20,
-            Component.translatable("message.clockworkblock.shield_flow", "").getString(),
-            1, 1, 32, flow);
+            "斥力流量：", 1, 1, 32, flow);
 
         rangeSlider = new ShieldSlider(x + 10, y + 85, 156, 20,
-            Component.translatable("message.clockworkblock.shield_range", "").getString(),
-            2, 1, 32, range);
+            "斥力范围：", 2, 1, 32, range);
 
         addRenderableWidget(phiSlider);
         addRenderableWidget(flowSlider);
@@ -75,6 +72,19 @@ public class ShieldBlockScreen extends AbstractContainerScreen<ShieldBlockMenu> 
         graphics.drawString(font,
             Component.translatable("block.clockworkblock.shield_block"),
             getGuiLeft() + 8, getGuiTop() + 5, 0xFFFFFF, false);
+
+        drawRangeLabels(graphics, phiSlider, 45, 270);
+        drawRangeLabels(graphics, flowSlider, 1, 32);
+        drawRangeLabels(graphics, rangeSlider, 1, 32);
+    }
+
+    private void drawRangeLabels(GuiGraphics graphics, ShieldSlider slider, int min, int max) {
+        graphics.drawString(font, Component.literal(String.valueOf(min)),
+            slider.getX() + 1, slider.getY() - 9, 0x808080);
+        String maxStr = String.valueOf(max);
+        graphics.drawString(font, Component.literal(maxStr),
+            slider.getX() + slider.getWidth() - font.width(maxStr) - 1,
+            slider.getY() - 9, 0x808080);
     }
 
     @Override
