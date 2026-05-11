@@ -30,5 +30,19 @@
   "tooltip.clockworkblock.shield_radius_info": "半径：受转速 ÷ 8",
   "tooltip.clockworkblock.shield_strength": "强度：%s",
   "tooltip.clockworkblock.shield_radius": "半径：%s 格",
-  "tooltip.clockworkblock.shield_nozzle_hint": "安装分散网以调节扩散角度"
+  "tooltip.clockworkblock.shield_nozzle_hint": "安装分散网以调节扩散角度",
+  "tooltip.clockworkblock.hold_shift": "按住 [Shift] 查看更多信息",
+  "tooltip.clockworkblock.charging_mode": "充能模式（无红石信号）",
+  "tooltip.clockworkblock.charging_detail": "从背面输入旋转动力，以 转速×256 消耗应力并储存能量，上限约 20 亿 SU·tick",
+  "tooltip.clockworkblock.discharging_mode": "放电模式（有红石信号）",
+  "tooltip.clockworkblock.discharging_detail": "从正面释放储存能量，提供无限应力容量",
+  "tooltip.clockworkblock.shift_right_click": "Shift + 右键：循环切换输出转速 16 / 32 / 64 / 128 RPM",
+  "tooltip.clockworkblock.shield_cone_title": "锥形扫描机制",
+  "tooltip.clockworkblock.shield_cone_phi": "斥力角度 φ：45°–270°，需安装分散网，控制锥形宽度",
+  "tooltip.clockworkblock.shield_cone_range": "斥力范围 r：转速 ÷ 8，锥形半径（格）",
+  "tooltip.clockworkblock.shield_cone_flow": "斥力强度：受红石信号控制",
+  "tooltip.clockworkblock.shield_cone_los": "视线检测：被方块遮挡的实体不会被推动，喷嘴自身会受反推力",
+  "tooltip.clockworkblock.shield_freq_title": "频率联动系统",
+  "tooltip.clockworkblock.shield_freq_detail": "相同频率对的斥力方块互为同盟，所在子空间互不推动，防止同频结构被吹走",
+  "tooltip.clockworkblock.shield_freq_redstone": "支持 Create 无线红石调节"
 }

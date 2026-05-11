@@ -21,13 +21,35 @@ public class ShieldBlockItem extends BlockItem {
     @Override
     public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_stress")
-            .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_strength_info")
-            .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_radius_info")
-            .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_nozzle_hint")
-            .withStyle(ChatFormatting.GRAY));
+        if (flag.hasShiftDown()) {
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_cone_title")
+                .withStyle(ChatFormatting.GOLD));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_cone_phi")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_cone_range")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_cone_flow")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_cone_los")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_freq_title")
+                .withStyle(ChatFormatting.GOLD));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_freq_detail")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_freq_redstone")
+                .withStyle(ChatFormatting.WHITE));
+        } else {
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_stress")
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_strength_info")
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_radius_info")
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_nozzle_hint")
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.literal(""));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".hold_shift")
+                .withStyle(ChatFormatting.GOLD));
+        }
     }
 }

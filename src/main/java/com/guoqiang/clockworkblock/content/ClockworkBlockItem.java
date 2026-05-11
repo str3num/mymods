@@ -40,21 +40,36 @@ public class ClockworkBlockItem extends BlockItem {
     @Override
     public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
-        tooltip.add(Component.translatable(
-                "tooltip." + ClockworkBlockMod.MOD_ID + ".energy",
-                getStoredEnergy(stack),
-                ClockworkBlockEntity.MAX_ENERGY
-            )
-            .withStyle(ChatFormatting.GOLD));
-        tooltip.add(Component.translatable(
-                "tooltip." + ClockworkBlockMod.MOD_ID + ".output_speed",
-                getOutputSpeed(stack)
-            )
-            .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".stress_input")
-            .withStyle(ChatFormatting.GRAY));
-        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".stress_output")
-            .withStyle(ChatFormatting.GRAY));
+        if (flag.hasShiftDown()) {
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".charging_mode")
+                .withStyle(ChatFormatting.GOLD));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".charging_detail")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".discharging_mode")
+                .withStyle(ChatFormatting.GOLD));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".discharging_detail")
+                .withStyle(ChatFormatting.WHITE));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shift_right_click")
+                .withStyle(ChatFormatting.WHITE));
+        } else {
+            tooltip.add(Component.translatable(
+                    "tooltip." + ClockworkBlockMod.MOD_ID + ".energy",
+                    getStoredEnergy(stack),
+                    ClockworkBlockEntity.MAX_ENERGY
+                )
+                .withStyle(ChatFormatting.GOLD));
+            tooltip.add(Component.translatable(
+                    "tooltip." + ClockworkBlockMod.MOD_ID + ".output_speed",
+                    getOutputSpeed(stack)
+                )
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".stress_input")
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".stress_output")
+                .withStyle(ChatFormatting.GRAY));
+            tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".hold_shift")
+                .withStyle(ChatFormatting.GOLD));
+        }
     }
 
     public static int getStoredEnergy(ItemStack stack) {

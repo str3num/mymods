@@ -30,5 +30,19 @@
   "tooltip.clockworkblock.shield_radius_info": "Radius: based on speed ÷ 8",
   "tooltip.clockworkblock.shield_strength": "Strength: %s",
   "tooltip.clockworkblock.shield_radius": "Radius: %s blocks",
-  "tooltip.clockworkblock.shield_nozzle_hint": "Install a Nozzle to adjust the spread angle"
+  "tooltip.clockworkblock.shield_nozzle_hint": "Install a Nozzle to adjust the spread angle",
+  "tooltip.clockworkblock.hold_shift": "Hold [Shift] for more info",
+  "tooltip.clockworkblock.charging_mode": "Charging Mode (no redstone)",
+  "tooltip.clockworkblock.charging_detail": "Receives power from back face, consumes stress = speed × 256 SU, stores up to ~2B SU·tick",
+  "tooltip.clockworkblock.discharging_mode": "Discharging Mode (redstone signal)",
+  "tooltip.clockworkblock.discharging_detail": "Releases stored energy from front face, provides infinite stress capacity",
+  "tooltip.clockworkblock.shift_right_click": "Shift + Right-click: cycle output speed 16 / 32 / 64 / 128 RPM",
+  "tooltip.clockworkblock.shield_cone_title": "Cone Scanning",
+  "tooltip.clockworkblock.shield_cone_phi": "Angle φ: 45°–270°, requires Nozzle, controls cone width",
+  "tooltip.clockworkblock.shield_cone_range": "Range r: speed ÷ 8, cone radius in blocks",
+  "tooltip.clockworkblock.shield_cone_flow": "Strength: controlled by redstone signal",
+  "tooltip.clockworkblock.shield_cone_los": "Line of sight: entities behind blocks are not pushed; nozzle receives recoil",
+  "tooltip.clockworkblock.shield_freq_title": "Frequency Link",
+  "tooltip.clockworkblock.shield_freq_detail": "Shields with same frequency pair are allied; their sub-levels won't push each other",
+  "tooltip.clockworkblock.shield_freq_redstone": "Supports Create wireless redstone control"
 }
