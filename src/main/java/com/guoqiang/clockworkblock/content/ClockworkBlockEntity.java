@@ -6,14 +6,13 @@ import com.guoqiang.clockworkblock.ClockworkBlockEntityTypes;
 
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import com.simibubi.create.foundation.utility.CreateLang;
-
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -142,45 +141,39 @@ public class ClockworkBlockEntity extends GeneratingKineticBlockEntity {
 
         float stressAtBase = calculateStressApplied();
         if (!Mth.equal(stressAtBase, 0)) {
-            CreateLang.translate("gui.goggles.kinetic_stats")
-                .forGoggles(tooltip);
+            tooltip.add(Component.translatable("tooltip.clockworkblock.kinetic_stats")
+                .withStyle(ChatFormatting.GOLD));
 
-            CreateLang.translate("tooltip.stressImpact")
-                .style(ChatFormatting.GRAY)
-                .forGoggles(tooltip);
+            tooltip.add(Component.translatable("tooltip.clockworkblock.stress_impact")
+                .withStyle(ChatFormatting.GRAY));
 
             float stressTotal = stressAtBase * Math.abs(getTheoreticalSpeed());
 
-            CreateLang.number(stressTotal)
-                .translate("generic.unit.stress")
-                .style(ChatFormatting.AQUA)
-                .space()
-                .add(CreateLang.translate("gui.goggles.at_current_speed")
-                    .style(ChatFormatting.DARK_GRAY))
-                .forGoggles(tooltip, 1);
+            MutableComponent stressLine = Component.literal(
+                    String.format("%.1f SU ", stressTotal))
+                .withStyle(ChatFormatting.AQUA)
+                .append(Component.translatable("tooltip.clockworkblock.at_current_speed")
+                    .withStyle(ChatFormatting.DARK_GRAY));
+            tooltip.add(stressLine);
 
             added = true;
         }
 
-        CreateLang.translate("tooltip.clockworkblock.stored_energy")
-            .style(ChatFormatting.GRAY)
-            .forGoggles(tooltip);
+        tooltip.add(Component.translatable("tooltip.clockworkblock.stored_energy")
+            .withStyle(ChatFormatting.GRAY));
 
-        CreateLang.builder()
-            .add(CreateLang.number(storedEnergy).style(ChatFormatting.GOLD))
-            .text(ChatFormatting.GRAY, " / ")
-            .add(CreateLang.number(MAX_ENERGY).style(ChatFormatting.DARK_GRAY))
-            .text(ChatFormatting.DARK_GRAY, " SU·tick")
-            .forGoggles(tooltip, 1);
+        MutableComponent energyLine = Component.literal(String.valueOf(storedEnergy))
+            .withStyle(ChatFormatting.GOLD)
+            .append(Component.literal(" / ").withStyle(ChatFormatting.GRAY))
+            .append(Component.literal(String.valueOf(MAX_ENERGY)).withStyle(ChatFormatting.DARK_GRAY))
+            .append(Component.literal(" SU·tick").withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(energyLine);
 
-        CreateLang.translate("tooltip.clockworkblock.power_label")
-            .style(ChatFormatting.GRAY)
-            .forGoggles(tooltip);
+        tooltip.add(Component.translatable("tooltip.clockworkblock.power_label")
+            .withStyle(ChatFormatting.GRAY));
 
-        CreateLang.builder()
-            .add(CreateLang.number(getPower()).style(ChatFormatting.AQUA))
-            .text(ChatFormatting.DARK_GRAY, " SU")
-            .forGoggles(tooltip, 1);
+        tooltip.add(Component.literal(String.valueOf(getPower()) + " SU")
+            .withStyle(ChatFormatting.AQUA));
 
         return true;
     }

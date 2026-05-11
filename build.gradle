@@ -9,7 +9,7 @@ version = mod_version
 group = mod_group_id
 
 base {
-    archivesName = "${mod_id}-${minecraft_version}"
+    archivesName = "create-shield-${minecraft_version}"
 }
 
 java {
@@ -42,6 +42,8 @@ repositories {
 }
 
 dependencies {
+    compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
+    compileOnly("net.createmod.ponder:ponder-neoforge:${ponder_version}+mc${minecraft_version}")
     compileOnly("com.simibubi.create:${create_artifact}:${create_version}")
     runtimeOnly("com.simibubi.create:${create_artifact}:${create_version}")
     compileOnly("dev.ryanhcode.sable:sable-neoforge-${minecraft_version}:1.2.2")
@@ -101,5 +103,5 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 tasks.named("jar", Jar).configure {
-    archiveFileName = "${mod_id}-${minecraft_version}-${mod_version}-${artifact_revision}.jar"
+    archiveFileName = "create-shield-${minecraft_version}-${mod_version}-${artifact_revision}.jar"
 }

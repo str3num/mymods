@@ -20,8 +20,15 @@
   "block.clockworkblock.shield_block.adjust": "Adjust Parameters",
   "message.clockworkblock.shield_range": "Shield range: %s blocks",
   "itemGroup.clockworkblock": "Create: Shield",
+  "tooltip.clockworkblock.kinetic_stats": "Kinetic Stats",
+  "tooltip.clockworkblock.stress_impact": "Stress Impact",
+  "tooltip.clockworkblock.at_current_speed": "at current speed",
   "tooltip.clockworkblock.stress_input": "Stress input: speed × 256",
   "tooltip.clockworkblock.stress_output": "Stress output: infinite",
-  "tooltip.clockworkblock.shield_stress": "Stress impact: speed² × redstone ÷ 16",
-  "itemGroup.clockworkblock_shield": "Create: Shield"
+  "tooltip.clockworkblock.shield_stress": "Stress impact: RPM × speed² × redstone ÷ 16",
+  "tooltip.clockworkblock.shield_strength_info": "Strength: based on redstone signal",
+  "tooltip.clockworkblock.shield_radius_info": "Radius: based on speed ÷ 8",
+  "tooltip.clockworkblock.shield_strength": "Strength: %s",
+  "tooltip.clockworkblock.shield_radius": "Radius: %s blocks",
+  "tooltip.clockworkblock.shield_nozzle_hint": "Install a Nozzle to adjust the spread angle"
 }

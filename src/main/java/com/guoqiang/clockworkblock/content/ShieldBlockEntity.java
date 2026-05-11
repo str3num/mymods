@@ -31,7 +31,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -892,22 +894,28 @@ public class ShieldBlockEntity extends KineticBlockEntity implements BlockEntity
         float stressAtBase = calculateStressApplied();
         float speed = Math.abs(getSpeed());
 
-        com.simibubi.create.foundation.utility.CreateLang.translate("gui.goggles.kinetic_stats")
-            .forGoggles(tooltip);
+        tooltip.add(Component.translatable("tooltip.clockworkblock.kinetic_stats")
+            .withStyle(ChatFormatting.GOLD));
 
-        com.simibubi.create.foundation.utility.CreateLang.translate("tooltip.stressImpact")
-            .style(net.minecraft.ChatFormatting.GRAY)
-            .forGoggles(tooltip);
+        tooltip.add(Component.translatable("tooltip.clockworkblock.stress_impact")
+            .withStyle(ChatFormatting.GRAY));
 
         float stressTotal = stressAtBase * Math.abs(getTheoreticalSpeed());
 
-        com.simibubi.create.foundation.utility.CreateLang.number(stressTotal)
-            .translate("generic.unit.stress")
-            .style(speed == 0 ? net.minecraft.ChatFormatting.DARK_GRAY : net.minecraft.ChatFormatting.AQUA)
-            .space()
-            .add(com.simibubi.create.foundation.utility.CreateLang.translate("gui.goggles.at_current_speed")
-                .style(net.minecraft.ChatFormatting.DARK_GRAY))
-            .forGoggles(tooltip, 1);
+        MutableComponent stressLine = Component.literal(
+                String.format("%.1f SU ", stressTotal))
+            .withStyle(speed == 0 ? ChatFormatting.DARK_GRAY : ChatFormatting.AQUA)
+            .append(Component.translatable("tooltip.clockworkblock.at_current_speed")
+                .withStyle(ChatFormatting.DARK_GRAY));
+        tooltip.add(stressLine);
+
+        tooltip.add(Component.translatable("tooltip.clockworkblock.shield_strength",
+                getEffectiveFlow() / 2)
+            .withStyle(ChatFormatting.GRAY));
+
+        tooltip.add(Component.translatable("tooltip.clockworkblock.shield_radius",
+                getEffectiveRange())
+            .withStyle(ChatFormatting.GRAY));
 
         return true;
     }

@@ -23,5 +23,11 @@ public class ShieldBlockItem extends BlockItem {
         super.appendHoverText(stack, context, tooltip, flag);
         tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_stress")
             .withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_strength_info")
+            .withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_radius_info")
+            .withStyle(ChatFormatting.GRAY));
+        tooltip.add(Component.translatable("tooltip." + ClockworkBlockMod.MOD_ID + ".shield_nozzle_hint")
+            .withStyle(ChatFormatting.GRAY));
     }
 }

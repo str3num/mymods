@@ -19,9 +19,16 @@
   "block.clockworkblock.shield_block.frequency_second": "第二频率",
   "block.clockworkblock.shield_block.adjust": "调节参数",
   "message.clockworkblock.shield_range": "斥力范围：%s 格",
-  "itemGroup.clockworkblock": "Create: Shield",
-  "tooltip.clockworkblock.stress_input": "输入应力量: 转速×256",
-  "tooltip.clockworkblock.stress_output": "输出应力量: 无限",
-  "tooltip.clockworkblock.shield_stress": "应力影响: 转速² × 红石信号 ÷ 16",
-  "itemGroup.clockworkblock_shield": "Create: Shield"
+  "itemGroup.clockworkblock": "机械动力：斥力盾",
+  "tooltip.clockworkblock.kinetic_stats": "动力数据",
+  "tooltip.clockworkblock.stress_impact": "应力影响",
+  "tooltip.clockworkblock.at_current_speed": "当前转速",
+  "tooltip.clockworkblock.stress_input": "输入应力量：转速×256",
+  "tooltip.clockworkblock.stress_output": "输出应力量：无限",
+  "tooltip.clockworkblock.shield_stress": "应力影响：RPM × 转速² × 红石信号 ÷ 16",
+  "tooltip.clockworkblock.shield_strength_info": "强度：受红石信号影响",
+  "tooltip.clockworkblock.shield_radius_info": "半径：受转速 ÷ 8",
+  "tooltip.clockworkblock.shield_strength": "强度：%s",
+  "tooltip.clockworkblock.shield_radius": "半径：%s 格",
+  "tooltip.clockworkblock.shield_nozzle_hint": "安装分散网以调节扩散角度"
 }

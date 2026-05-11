@@ -64,7 +64,7 @@
 ./gradlew build
 ```
 
-输出 JAR：`build/libs/clockworkblock-1.21.1-<version>-<revision>.jar`
+输出 JAR：`build/libs/create-shield-1.21.1-<version>-<revision>.jar`
 
 ## 许可
 

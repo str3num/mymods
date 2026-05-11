@@ -6,6 +6,10 @@ pluginManagement {
     }
 }
 
-includeBuild("../Create")
+includeBuild("../Create-mc1.21.1-6.0.10/Create-mc1.21.1-6.0.10") {
+    dependencySubstitution {
+        substitute module("com.simibubi.create:create-1.21.1") using project(":")
+    }
+}
 
 rootProject.name = "create-shield-1.21.1"
